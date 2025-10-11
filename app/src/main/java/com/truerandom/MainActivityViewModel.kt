@@ -1,10 +1,16 @@
 package com.truerandom
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.util.Log
+import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import com.google.gson.Gson
+import com.spotify.android.appremote.api.ConnectionParams
+import com.spotify.android.appremote.api.Connector
+import com.spotify.android.appremote.api.SpotifyAppRemote
+import com.spotify.sdk.android.auth.AuthorizationClient
 import com.spotify.sdk.android.auth.AuthorizationRequest
 import com.spotify.sdk.android.auth.AuthorizationResponse
 import com.truerandom.model.SpotifyAuth
@@ -21,7 +27,7 @@ const val AUTH_REQUEST_CODE = 394056
 
 const val CLIENT_ID = "e61d6a48cd14457c97e43850f03eb35c"
 const val CLIENT_SECRET = "a699313bb43743029848c2e4d320e448"
-const val REDIRECT_URI = "truerandom://auth/spotify-callback"
+const val REDIRECT_URI = "truerandom://auth"
 
 class MainActivityViewModel : ViewModel() {
     private val SCOPES = arrayOf(
@@ -29,22 +35,8 @@ class MainActivityViewModel : ViewModel() {
     )
     private val gson = Gson()
 
-    // Change the function signature to return the Intent
-    fun createSpotifyAuthorizationIntent(activity: Activity): Intent {
-        Log.d(TAG, "Creating Spotify Authorization Intent...")
-
-        val builder = AuthorizationRequest.Builder(
-            CLIENT_ID,
-            AuthorizationResponse.Type.CODE, // Requesting an access token
-            REDIRECT_URI
-        )
-
-        builder.setScopes(SCOPES)
-        val request = builder.build()
-
-        // use phone browser directly to open the URI (instead of spotify browser)
-        return Intent("android.intent.action.VIEW", request.toUri())
-    }
+    private var accessToken: String? = null
+    private var trackUri: String? = null
 
     fun onRequestAuthResult(intent: Intent) {
         Log.d("JAY_LOG", "MainActivityViewModel, onRequestAuthResult: dataString = ${intent.dataString}")
@@ -110,31 +102,6 @@ class MainActivityViewModel : ViewModel() {
         })
     }
 
-    private fun fetchLikedSongs(token: String) {
-        val url = "https://api.spotify.com/v1/me/tracks?limit=50"
-
-        val request = Request.Builder()
-            .url(url)
-            .addHeader("Authorization", "Bearer $token")
-            .build()
-
-        OkHttpClient().newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                Log.e(TAG, "Failed to get liked songs", e)
-            }
-
-            override fun onResponse(call: Call, response: Response) {
-                val body = response.body?.string()
-                Log.d(TAG, "Liked Songs JSON: $body")
-
-                val likedSongsResponse = gson.fromJson(body, LikedTracksFullResponse::class.java)
-                likedSongsResponse.items?.firstOrNull()?.track?.uri?.let { trackUri ->
-                    playTrack(token, trackUri)
-                }
-            }
-        })
-    }
-
     private fun playTrack(token: String, trackUri: String) {
         val url = "https://api.spotify.com/v1/me/player/play"
 
@@ -171,4 +138,115 @@ class MainActivityViewModel : ViewModel() {
             }
         })
     }
+
+    // ========= OLD CODES ABOVE!!!!
+    // TODO: JAY_LOG - testing appRemote
+    private var mSpotifyAppRemote: SpotifyAppRemote? = null
+
+    // Change the function signature to return the Intent
+    fun createSpotifyAuthorizationIntent(activity: Activity) {
+        Log.d(TAG, "Creating Spotify Authorization Intent...")
+
+        val builder = AuthorizationRequest.Builder(
+            CLIENT_ID,
+            AuthorizationResponse.Type.TOKEN,
+            REDIRECT_URI
+        )
+
+        builder.setScopes(SCOPES)
+        val request = builder.build()
+
+        // use phone browser directly to open the URI (instead of spotify browser)
+        AuthorizationClient.openLoginActivity(activity, AUTH_REQUEST_CODE, request)
+    }
+
+    fun onAuthResult(response: AuthorizationResponse) {
+        Log.d(TAG, "Authorization Response Parsed. Type: ${response.type.name}")
+
+        when (response.type) {
+            AuthorizationResponse.Type.TOKEN -> {
+                accessToken = response.accessToken
+
+                // Detailed logging for the parsed response object
+                Log.i(TAG, "Auth Token Success! Details:")
+                Log.i(TAG, "   > Access Token: ${accessToken?.take(10)}...")
+                Log.i(TAG, "   > Expires In: ${response.expiresIn} seconds")
+
+                fetchLikedSongs(response.accessToken)
+            }
+            AuthorizationResponse.Type.ERROR -> {
+                Log.e(TAG, "Authorization failed: ${response.error}")
+            }
+            else -> {
+                Log.w(TAG, "Authorization result was cancelled or of an unexpected type.")
+            }
+        }
+    }
+
+    private fun fetchLikedSongs(token: String) {
+        val url = "https://api.spotify.com/v1/me/tracks?limit=50"
+
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("Authorization", "Bearer $token")
+            .build()
+
+        OkHttpClient().newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                Log.e(TAG, "Failed to get liked songs", e)
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                val body = response.body?.string()
+                Log.d(TAG, "Liked Songs JSON: $body")
+
+                val likedSongsResponse = gson.fromJson(body, LikedTracksFullResponse::class.java)
+                likedSongsResponse.items?.lastOrNull()?.track?.uri?.let { trackUri ->
+                    playTrack(trackUri)
+                }
+            }
+        })
+    }
+
+    fun attemptAppRemoteConnect(context: Context) {
+        // Log the type of Context being used to help diagnose UI-related connection failures
+        Log.d(TAG, "MainActivityViewModel, attemptAppRemoteConnect: Executing delayed connect. Context Type: ${context::class.simpleName}")
+
+        // NOTE: For 'showAuthView(true)' to work, 'context' should ideally be an Activity Context.
+
+        // Use showAuthView(true) to implicitly re-authorize the user without a full login screen
+        val connectionParams = ConnectionParams.Builder(CLIENT_ID)
+            .setRedirectUri(REDIRECT_URI)
+            .showAuthView(true)
+            .build()
+
+        // Connect
+        SpotifyAppRemote.connect(context, connectionParams, object : Connector.ConnectionListener {
+            override fun onConnected(spotifyAppRemote: SpotifyAppRemote) {
+                mSpotifyAppRemote = spotifyAppRemote
+                Log.i(TAG, "SpotifyAppRemote connected successfully! Ready for playback.")
+                Toast.makeText(context, "Spotify Remote Connected!", Toast.LENGTH_SHORT).show()
+
+                // Next step in development would be to call a playback function here.
+            }
+
+            override fun onFailure(throwable: Throwable) {
+                Log.e(TAG, "SpotifyAppRemote connection failed: ${throwable.message}", throwable)
+                Toast.makeText(context, "Spotify Remote Failed: ${throwable.message}", Toast.LENGTH_LONG).show()
+            }
+        })
+    }
+
+    private fun playTrack(trackUri: String) {
+        mSpotifyAppRemote?.let {
+            // Play a playlist
+            it.playerApi.play(trackUri)
+            // Subscribe to PlayerState
+            it.playerApi.subscribeToPlayerState().setEventCallback {
+                Log.d("JAY_LOG", "MainActivityViewModel, connected: event callback = $it")
+            }
+        }
+
+    }
+
 }

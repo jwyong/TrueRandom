@@ -1,6 +1,7 @@
 package com.truerandom
 
 import StandardPermissionsUtil
+import android.app.ComponentCaller
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
@@ -9,6 +10,7 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.core.content.ContextCompat
+import com.spotify.sdk.android.auth.AuthorizationClient
 import com.truerandom.databinding.ActivityMainBinding
 import com.truerandom.service.TrackService
 
@@ -41,12 +43,14 @@ class MainActivity : ComponentActivity(), StandardPermissionsUtil.StandardPermis
 
     private fun bindUi() {
         with(binding) {
-            btnGoogle.setOnClickListener {
-                val intent = viewModel.createSpotifyAuthorizationIntent(this@MainActivity)
-                spotifyAuthLauncher.launch(intent)
+            bthAuth.setOnClickListener {
+                viewModel.createSpotifyAuthorizationIntent(this@MainActivity)
+//                val intent = viewModel.createSpotifyAuthorizationIntent(this@MainActivity)
+//                spotifyAuthLauncher.launch(intent)
             }
 
             btnPlayPause.setOnClickListener {
+                viewModel.attemptAppRemoteConnect(this@MainActivity)
 
             }
         }
@@ -58,6 +62,24 @@ class MainActivity : ComponentActivity(), StandardPermissionsUtil.StandardPermis
         setIntent(intent) // Always call setIntent to update the Activity's Intent
 
         viewModel.onRequestAuthResult(intent)
+    }
+
+    override fun onActivityResult(
+        requestCode: Int,
+        resultCode: Int,
+        data: Intent?,
+        caller: ComponentCaller
+    ) {
+        super.onActivityResult(requestCode, resultCode, data, caller)
+
+        Log.d("JAY_LOG", "MainActivity, onActivityResult: requestCode = $requestCode, " +
+                "resultCode = $resultCode, data = $data, caller = $caller")
+
+        val response = AuthorizationClient.getResponse(resultCode, data)
+
+        Log.d("JAY_LOG", "MainActivity, onActivityResult: response = $response")
+
+        viewModel.onAuthResult(response)
     }
 
     override fun onStandardPermissionsGranted(requestCode: Int) {
