@@ -1,4 +1,4 @@
-package com.truerandom
+package com.truerandom.model
 
 import com.google.gson.annotations.SerializedName
 
@@ -64,7 +64,27 @@ data class Track(
 
     @SerializedName("track_number")
     val trackNumber: Int?
-)
+) {
+    /**
+     * Utility function to format a list of Spotify Artist objects into a single string.
+     *
+     * @param artists The list of Artist objects associated with a track.
+     * @return A comma-separated string of artist names (e.g., "Taylor Swift, Post Malone").
+     */
+    fun formatArtistNames(): String? {
+        // 1. Handle null or empty list immediately.
+        if (artists.isNullOrEmpty()) {
+            return null
+        }
+
+        // 2. Use the standard Kotlin 'joinToString' function.
+        //    - 'map { it.name }' extracts only the name property.
+        //    - 'filterNotNull()' removes any artist names that might be null (a safety measure).
+        //    - 'joinToString()' concatenates the list with ", ".
+        return artists.mapNotNull { it.name }.joinToString(separator = ", ")
+    }
+
+}
 
 // --- ALBUM OBJECT ---
 
