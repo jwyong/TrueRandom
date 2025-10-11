@@ -1,3 +1,4 @@
+// Apply plugins
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -16,6 +17,9 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        manifestPlaceholders["redirectSchemeName"] = "truerandom" // The scheme
+        manifestPlaceholders["redirectHostName"] = "callback"          // The host
     }
 
     buildTypes {
@@ -49,6 +53,7 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+    implementation(libs.androidx.appcompat)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -56,4 +61,16 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+
+    implementation(libs.okhttp)
+    implementation(libs.kotlinx.coroutines.android)
+
+    implementation(files("libs/app-remote-lib.aar"))
+    implementation(files("libs/auth.aar"))
+
+    implementation(libs.androidx.media3.session)
+    implementation(libs.androidx.media3.common)
+
+    implementation(libs.androidx.browser)
+    implementation(libs.google.gson)
 }

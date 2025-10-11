@@ -1,0 +1,6 @@
+package com.truerandom.util
+
+const val ACTION_PREV_TRACK = "ACTION_PREV_TRACK"
+const val ACTION_PLAY_TRACK = "ACTION_PLAY_TRACK"
+const val ACTION_PAUSE_TRACK = "ACTION_PAUSE_TRACK"
+const val ACTION_NEXT_TRACK = "ACTION_NEXT_TRACK"

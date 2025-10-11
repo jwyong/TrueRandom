@@ -1,15 +1,102 @@
+# -----------------------------------------------
+# Standard .gitignore for Kotlin/Android Projects
+# -----------------------------------------------
+
+# --- 1. IDE Files (Android Studio / IntelliJ) ---
+
+.idea/
+.gradle/
 *.iml
-.gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
+*.iws
+*.iprr
 local.properties
+.DS_Store
+
+# IntelliJ/Android Studio-specific files (from your screenshot)
+/app/libs/app-remote-lib.aar  # <-- NEW: Large binary libraries
+/app/libs/auth.aar           # <-- NEW: Large binary libraries
+/libs.versions.toml.bak      # <-- NEW: Temporary file backup
+/misc.xml                    # <-- NEW: IDE settings file
+/deviceManager.xml           # <-- NEW: IDE settings file
+/inspectionProfiles/         # <-- NEW: Directory for inspection profiles
+/deploymentTargetSelector.xml # <-- NEW: IDE settings file
+
+# --- 2. Build Outputs and Directories ---
+
+# General Gradle output directories
+
+/build
+/out
+/captures
+
+# App module specific output
+
+*/build/
+
+# Kotlin cache and metadata
+
+.kotlin/
+.kotlin_gradle/
+*.kpt
+.ksp_cache/
+
+# Android-specific build files
+
+*.apk
+*.aab
+*.aar
+.dex
+/intermediates/
+/generated/
+/merged/
+/obj/
+/aapt/
+/ndk/
+/lint-results/
+
+# --- 3. External Dependencies and Libraries ---
+
+# Dependencies downloaded by Gradle
+
+/caches/
+
+# Gradle Wrapper specific files
+
+!gradle-wrapper.jar
+
+# --- 4. Personal & Security Files ---
+
+# User configuration files (e.g., Run configurations)
+
+*.user
+*.bak
+*.swp
+
+# Debug Keystores (CRITICAL to avoid committing security credentials)
+
+*.keystore
+debug.keystore
+upload-keystore.jks
+
+# Firebase-related configuration files (usually contains sensitive keys)
+
+google-services.json
+firebase-*.json
+
+# Other potential secret files (like the one containing your Spotify CLIENT_SECRET)
+
+secrets.properties
+.env
+.secrets
+.config/
+
+# Crashlytics or external tools
+
+.crashlytics/
+crashlytics.properties
+
+# --- 5. Lint and Test Outputs ---
+
+/lint-cache
+/jacocoTestReports
+/test-results
