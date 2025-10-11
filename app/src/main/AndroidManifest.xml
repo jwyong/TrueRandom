@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <queries>
         <!-- Include this to allow discovery of the Spotify app -->
@@ -9,6 +12,7 @@
     </queries>
 
     <application
+        android:name=".TrueRandom"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -20,8 +24,15 @@
 
         <receiver android:name=".receiver.TrackReceiver" />
 
+        <service
+            android:name=".service.TrackService"
+            android:label="@string/app_name"
+            android:foregroundServiceType="mediaPlayback"
+            android:exported="false">
+        </service>
+
         <activity
-            android:name=".MainActivity"
+            android:name=".ui.MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
             android:theme="@style/Theme.TrueRandom">
@@ -42,11 +53,7 @@
                     android:host="auth"
                     android:pathPattern=".*"
                     />
-
-
-
             </intent-filter>
-
         </activity>
     </application>
 
