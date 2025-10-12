@@ -10,12 +10,15 @@ import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.activity.viewModels
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import com.spotify.sdk.android.auth.AuthorizationClient
 import com.truerandom.R
 import com.truerandom.databinding.ActivityMainBinding
 import com.truerandom.service.TrackService
 import com.truerandom.util.EventsUtil
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.launch
 
 const val TAG = "JAY_LOG"
 @AndroidEntryPoint
@@ -30,6 +33,7 @@ class MainActivity : ComponentActivity(), StandardPermissionsUtil.StandardPermis
         setContentView(binding.root)
 
         bindUi()
+        collectFlowEvents()
 
         // Get required perms
         StandardPermissionsUtil.requestStandardPermissions(this)
@@ -50,14 +54,6 @@ class MainActivity : ComponentActivity(), StandardPermissionsUtil.StandardPermis
                 btnNext.isEnabled = !isLoading
             }
 
-            TrackService.isPlayingLD.observe(this@MainActivity) { isPlaying ->
-                btnPlayPause.text = if (isPlaying) {
-                    getString(R.string.notification_pause)
-                } else {
-                    getString(R.string.notification_play)
-                }
-            }
-
             btnPlayPause.setOnClickListener {
                 EventsUtil.sendPlayPauseButtonEvent()
             }
@@ -69,6 +65,23 @@ class MainActivity : ComponentActivity(), StandardPermissionsUtil.StandardPermis
             btnNext.setOnClickListener {
                 EventsUtil.sendPrevNextButtonEvent(true)
             }
+        }
+    }
+
+    private fun collectFlowEvents() {
+        lifecycleScope.launch {
+            combine(
+                TrackService.isPlayingSF, TrackService.currentTrackLabelSF
+            ) { isPlaying, currentTrackLabel ->
+                binding.btnPlayPause.text = if (isPlaying) {
+                    getString(R.string.notification_pause)
+                } else {
+                    getString(R.string.notification_play)
+                }
+
+                binding.tvTrack.text = currentTrackLabel
+                Unit
+            }.collect { }
         }
     }
 

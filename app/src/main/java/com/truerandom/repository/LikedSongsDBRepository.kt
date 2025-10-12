@@ -2,6 +2,7 @@ package com.truerandom.repository
 
 import com.truerandom.dao.TrackDao
 import com.truerandom.db.entity.LikedTrackEntity
+import com.truerandom.model.TrackUIDetails
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -65,6 +66,12 @@ class LikedSongsDBRepository @Inject constructor(
             // randomOrNull() ensures safety if the list is empty (which shouldn't happen
             // if isLikedSongsSynced() is checked, but safety first).
             leastPlayedTrackUris.randomOrNull()
+        }
+    }
+
+    suspend fun getTrackDetailsByTrackUri(trackUri: String): TrackUIDetails? {
+        return withContext(Dispatchers.IO) {
+            trackDao.getTrackDetailsByUri(trackUri)
         }
     }
 }
