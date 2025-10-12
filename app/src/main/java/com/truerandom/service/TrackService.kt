@@ -4,8 +4,8 @@ import android.app.Service
 import android.content.Intent
 import android.os.IBinder
 import android.util.Log
-import androidx.lifecycle.MutableLiveData
 import com.spotify.android.appremote.api.SpotifyAppRemote
+import com.truerandom.R
 import com.truerandom.repository.LikedSongsDBRepository
 import com.truerandom.repository.SecurePreferencesRepository
 import com.truerandom.ui.TAG
@@ -15,6 +15,10 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -38,6 +42,8 @@ class TrackService: Service() {
         collectPrevNextBtnEvent()
         collectCurrentTrackEndedEvent()
 
+        collectNotificationUiFlowEvent()
+
         // Show foreground notification
         NotificationUtil.createNotificationChannel(this)
     }
@@ -50,7 +56,7 @@ class TrackService: Service() {
             NotificationUtil.NOTIFICATION_ID, NotificationUtil.createNotification(this)
         )
 
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     override fun onBind(p0: Intent?): IBinder? {
@@ -64,7 +70,7 @@ class TrackService: Service() {
     private fun collectPlayPauseBtnEvent() {
         collectScope.launch {
             EventsUtil.playPauseButtonEventFlow.flow.collect {
-                Log.d(TAG, "TrackService, collectPlayPauseBtnEvent: isPlaying = $isPlaying")
+                Log.d(TAG, "TrackService, collectPlayPauseBtnEvent: isPlaying = ${isPlaying}")
 
                 if (isPlaying) {
                     mSpotifyAppRemote?.playerApi?.pause()
@@ -123,6 +129,27 @@ class TrackService: Service() {
         }
     }
 
+    // Notification UI - just create a new notification and set to foreground again
+    private fun collectNotificationUiFlowEvent() {
+        collectScope.launch {
+            combine(isPlayingSF, currentTrackLabelSF) { _, _ ->
+                true
+            }.collect {
+                updateNotificationUI()
+            }
+        }
+    }
+
+    private fun updateNotificationUI() {
+        // 1. Re-run the function to get the new Notification object
+        val updatedNotification = NotificationUtil.createNotification(this)
+
+        // 2. Re-issue the notification using the same ID
+        // This updates the existing foreground notification without affecting the service status
+        startForeground(NotificationUtil.NOTIFICATION_ID, updatedNotification)
+    }
+
+
     /**
      * Choose a new random uri to be played, based on lowest play count. This is called from:
      * - fresh new session play btn
@@ -135,7 +162,7 @@ class TrackService: Service() {
 
             // Check if current uri available
             currentTrackUri?.let { currentUri ->
-                Log.d(TAG, "TrackService, playRandomLowCountTrack: currentTrack available, incrementing playCount...")
+                Log.d(TAG, "TrackService, playRandomLowCountTrack: currentTrack available")
 
                 // Increment current track's playCount if needed (for normal playback finished)
                 if (shouldIncrementPlayCount) {
@@ -175,7 +202,34 @@ class TrackService: Service() {
 
                 // Reset trackEnd detected boolean
                 hasDetectedTrackEnd = false
+
+                // Update UI (title and artist)
+                defaultScope.launch {
+                    currentTrackUri?.let { trackUri ->
+                        val trackUIDetail = likedSongsDBRepository.getTrackDetailsByTrackUri(trackUri)
+                        val trackName = if (trackUIDetail?.trackName?.isNotBlank() == true) {
+                            trackUIDetail.trackName
+                        } else {
+                            getString(R.string.unknown)
+                        }
+                        val trackArtists = if (trackUIDetail?.artistName?.isNotBlank() == true) {
+                            trackUIDetail.artistName
+                        } else {
+                            getString(R.string.unknown)
+                        }
+
+                        currentTrackLabel = "$trackName - $trackArtists"
+                    }
+                }
             }
+    }
+
+    override fun onDestroy() {
+        // Stop playing track onDestroy
+        Log.d(TAG, "TrackService, onDestroy: pausing playback...")
+        mSpotifyAppRemote?.playerApi?.pause()
+
+        super.onDestroy()
     }
 
     companion object {
@@ -188,10 +242,19 @@ class TrackService: Service() {
         // App remote related
         var mSpotifyAppRemote: SpotifyAppRemote? = null
 
-        val isPlayingLD = MutableLiveData(false)
+        // UI
+        private val _isPlayingSF = MutableStateFlow(false)
+        val isPlayingSF: StateFlow<Boolean> = _isPlayingSF.asStateFlow()
         var isPlaying: Boolean
-            get() = isPlayingLD.value?: false
-            set(value) { isPlayingLD.postValue(value) }
+            get() = _isPlayingSF.value
+            set(value) { _isPlayingSF.value = value }
+
+        // Label: <trackName> - <trackArtists>
+        private val _currentTrackLabelSF = MutableStateFlow("")
+        val currentTrackLabelSF: StateFlow<String> = _currentTrackLabelSF.asStateFlow()
+        var currentTrackLabel: String
+            get() = _currentTrackLabelSF.value
+            set(value) { _currentTrackLabelSF.value = value }
 
         var previousTrackUri: String? = null
         var currentTrackUri: String? = null

@@ -75,7 +75,7 @@ dependencies {
 
     implementation(libs.security.crypto)
 
-
+    implementation("androidx.media:media:1.7.0")
 }
 
 kapt {

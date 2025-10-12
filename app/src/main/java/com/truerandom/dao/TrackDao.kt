@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import com.truerandom.db.entity.LikedTrackEntity
+import com.truerandom.model.TrackUIDetails
 
 /**
  * Data Access Object for the LikedTrackEntity.
@@ -44,5 +45,19 @@ interface TrackDao {
         WHERE playCount = (SELECT MIN(playCount) FROM liked_tracks)
     """)
     suspend fun getLeastPlayedTrackUris(): List<String>
+
+    /**
+     * Retrieves the track name, artist name, and album cover URL
+     * based on the unique Spotify track URI.
+     * * @param uri The unique identifier (trackUri) for the track.
+     * @return LikedTrackEntity object containing the requested fields, or null if not found.
+     */
+    @Query("""
+        SELECT trackName, artistName, albumCoverUrl 
+        FROM liked_tracks 
+        WHERE trackUri = :uri
+        LIMIT 1
+    """)
+    suspend fun getTrackDetailsByUri(uri: String): TrackUIDetails?
 
 }

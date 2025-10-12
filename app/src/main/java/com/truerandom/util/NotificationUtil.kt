@@ -8,8 +8,9 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
 import com.truerandom.R
-import com.truerandom.receiver.TrackReceiver
+import com.truerandom.receiver.NotificationReceiver
 import com.truerandom.service.TrackService
+import com.truerandom.ui.MainActivity
 
 object NotificationUtil {
     const val NOTIFICATION_ID = 18473
@@ -24,7 +25,7 @@ object NotificationUtil {
         val channel = NotificationChannel(
             CHANNEL_ID,
             context.getString(R.string.app_name),
-            NotificationManager.IMPORTANCE_LOW
+            NotificationManager.IMPORTANCE_HIGH
         ).apply {
             description = context.getString(R.string.foreground_desc)
         }
@@ -33,7 +34,7 @@ object NotificationUtil {
     }
 
     fun createNotification(context: Context): Notification {
-        val prevTrackIntent = Intent(context, TrackReceiver::class.java).apply {
+        val prevTrackIntent = Intent(context, NotificationReceiver::class.java).apply {
             action = ACTION_PREV_TRACK
         }
         val prevTrackPendingIntent = PendingIntent.getBroadcast(
@@ -43,7 +44,7 @@ object NotificationUtil {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val playTrackIntent = Intent(context, TrackReceiver::class.java).apply {
+        val playTrackIntent = Intent(context, NotificationReceiver::class.java).apply {
             action = if (TrackService.isPlaying) ACTION_PAUSE_TRACK else ACTION_PLAY_TRACK
         }
         val playPausePendingIntent = PendingIntent.getBroadcast(
@@ -53,7 +54,7 @@ object NotificationUtil {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val nextTrackIntent = Intent(context, TrackReceiver::class.java).apply {
+        val nextTrackIntent = Intent(context, NotificationReceiver::class.java).apply {
             action = ACTION_NEXT_TRACK
         }
         val nextTrackPendingIntent = PendingIntent.getBroadcast(
@@ -72,10 +73,31 @@ object NotificationUtil {
             context.getString(it)
         }
 
-        return NotificationCompat.Builder(context, CHANNEL_ID)
+        // Launch app when tap on notification body
+        val launchIntent = Intent(context, MainActivity::class.java).apply {
+            // Optional: Add flags to ensure a clean launch
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        val contentPendingIntent = PendingIntent.getActivity(
+            context,
+            0, // Request code, 0 is common for the main content intent
+            launchIntent,
+            // Use FLAG_IMMUTABLE (required on Android 12+) or FLAG_UPDATE_CURRENT
+            PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // Get content string (<trackName> - <trackArtists>)
+        val trackLabel = if (TrackService.currentTrackLabel.isBlank()) {
+            context.getString(R.string.unknown)
+        } else {
+            TrackService.currentTrackLabel
+        }
+
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setContentTitle(context.getString(R.string.app_name))
-            .setContentText(context.getString(R.string.foreground_desc))
-            .setSmallIcon(android.R.drawable.stat_notify_sync)
+            .setContentText(trackLabel)
+            .setContentIntent(contentPendingIntent)
+            .setSmallIcon(android.R.drawable.ic_media_play)
             .addAction(
                 PREV_TRACK_REQUEST_CODE,
                 context.getString(R.string.notification_prev),
@@ -88,6 +110,7 @@ object NotificationUtil {
                 nextTrackPendingIntent
             )
             .setOngoing(true)
-            .build()
+
+        return builder.build()
     }
 }
