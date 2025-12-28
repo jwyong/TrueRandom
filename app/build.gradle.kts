@@ -49,6 +49,9 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.appcompat)
+    implementation(libs.androidx.recyclerview)
+    implementation(libs.androidx.paging.common.android)
+    implementation(libs.androidx.paging.runtime.ktx)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -68,6 +71,7 @@ dependencies {
     implementation(libs.androidx.room.runtime) // Core Room functions
     implementation(libs.androidx.room.ktx)    // Coroutines extensions for Room
     kapt(libs.androidx.room.compiler)         // Annotation Processor for Room
+    implementation(libs.androidx.room.paging)
 
     kapt(libs.hilt.compiler)
     implementation(libs.hilt.navigation)

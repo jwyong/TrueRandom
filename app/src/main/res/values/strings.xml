@@ -10,4 +10,5 @@
     <string name="authenticate">Authenticate</string>
 
     <string name="unknown">Unknown</string>
+    <string name="local">Local &#183;\u0020</string>
 </resources>
