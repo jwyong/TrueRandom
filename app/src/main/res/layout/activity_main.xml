@@ -1,56 +1,81 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:fitsSystemWindows="true"
+    android:background="@color/purple_500"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <ProgressBar
-        android:id="@+id/progress_horizontal"
-        style="@android:style/Widget.ProgressBar.Horizontal"
+    <androidx.appcompat.widget.Toolbar
+        android:id="@+id/toolbar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:indeterminate="true" />
+        android:layout_height="?attr/actionBarSize"
+        android:background="@color/purple_500"
+        android:elevation="4dp"
+        app:title="@string/app_name"
+        app:titleTextColor="@color/white"
+        app:titleMarginStart="24dp"
+        app:titleMarginEnd="24dp"
+        app:contentInsetStart="0dp"
+        app:contentInsetStartWithNavigation="0dp" />
 
-    <TextView
-        android:id="@+id/tvTrack"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_above="@id/llBtns"
-        android:layout_centerHorizontal="true"
-        android:gravity="center"
-        android:textSize="14sp"
-        android:layout_marginBottom="10dp"
-        tools:text="ArtistName - TrackName asdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdf" />
-
-    <LinearLayout
-        android:id="@+id/llBtns"
+    <RelativeLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_centerVertical="true"
-        android:layout_marginHorizontal="25dp"
-        android:gravity="center_horizontal"
-        android:orientation="horizontal">
+        android:layout_height="match_parent"
+        android:background="@color/white">
 
-        <Button
-            android:id="@+id/btnPrev"
-            android:layout_width="0dp"
+        <ProgressBar
+            android:id="@+id/progress_horizontal"
+            style="@android:style/Widget.ProgressBar.Horizontal"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/notification_prev" />
+            android:indeterminate="true" />
 
-        <Button
-            android:id="@+id/btnPlayPause"
-            android:layout_width="0dp"
+        <TextView
+            android:id="@+id/tvTrack"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/notification_play" />
+            android:layout_above="@id/llBtns"
+            android:layout_centerHorizontal="true"
+            android:gravity="center"
+            android:textSize="14sp"
+            android:layout_marginBottom="10dp"
+            tools:text="ArtistName - TrackName asdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdf" />
 
-        <Button
-            android:id="@+id/btnNext"
-            android:layout_width="0dp"
+        <LinearLayout
+            android:id="@+id/llBtns"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/notification_next" />
+            android:layout_centerVertical="true"
+            android:layout_marginHorizontal="25dp"
+            android:gravity="center_horizontal"
+            android:orientation="horizontal">
 
-    </LinearLayout>
-</RelativeLayout>
+            <Button
+                android:id="@+id/btnPrev"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/notification_prev" />
+
+            <Button
+                android:id="@+id/btnPlayPause"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/notification_play" />
+
+            <Button
+                android:id="@+id/btnNext"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/notification_next" />
+
+        </LinearLayout>
+
+    </RelativeLayout>
+
+
+</FrameLayout>

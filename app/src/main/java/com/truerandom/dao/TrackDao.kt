@@ -31,18 +31,25 @@ interface TrackDao {
      * @param trackUri The unique Spotify URI of the track to update.
      * @return The number of rows updated (should be 1 if successful).
      */
-    @Query("UPDATE liked_tracks SET playCount = playCount + 1 WHERE trackUri = :trackUri")
+    @Query("UPDATE play_count SET playCount = playCount + 1 WHERE trackUri = :trackUri")
     suspend fun incrementPlayCount(trackUri: String): Int
 
     /**
      * OPTIMIZED QUERY: Fetches only the URIs of tracks that have the minimum playCount.
-     * This minimizes the data transfer overhead for large "unplayed" pools.
+     * This minimizes the data transfer overhead for large "unplayed" pools. if trackUri doesn't
+     * exist on the play_count table, that playCount will be 0
      *
      * @return A list of track URIs (String) sharing the lowest play count.
      */
     @Query("""
-        SELECT trackUri FROM liked_tracks 
-        WHERE playCount = (SELECT MIN(playCount) FROM liked_tracks)
+        SELECT lt.trackUri 
+        FROM liked_tracks lt
+        LEFT JOIN play_count pc ON lt.trackUri = pc.trackUri
+        WHERE COALESCE(pc.playCount, 0) = (
+            SELECT MIN(COALESCE(playCount, 0)) 
+            FROM liked_tracks lt2
+            LEFT JOIN play_count pc2 ON lt2.trackUri = pc2.trackUri
+        )
     """)
     suspend fun getLeastPlayedTrackUris(): List<String>
 

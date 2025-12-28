@@ -25,7 +25,4 @@ data class LikedTrackEntity(
     
     // Metadata for ordering/display
     val addedAt: String?, // ISO 8601 timestamp from Spotify
-
-    // Play count!
-    val playCount: Int = 0
 )
