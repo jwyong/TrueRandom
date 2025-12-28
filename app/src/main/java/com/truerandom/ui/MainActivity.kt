@@ -7,8 +7,8 @@ import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import android.view.View
-import androidx.activity.ComponentActivity
 import androidx.activity.viewModels
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.spotify.sdk.android.auth.AuthorizationClient
@@ -22,9 +22,11 @@ import kotlinx.coroutines.launch
 
 const val TAG = "JAY_LOG"
 @AndroidEntryPoint
-class MainActivity : ComponentActivity(), StandardPermissionsUtil.StandardPermissionCallback {
+class MainActivity : AppCompatActivity(), StandardPermissionsUtil.StandardPermissionCallback {
     private lateinit var binding: ActivityMainBinding
     private val viewModel: MainViewModel by viewModels()
+
+    private lateinit var adapter: LikedTracksAdapter
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -54,6 +56,9 @@ class MainActivity : ComponentActivity(), StandardPermissionsUtil.StandardPermis
                 btnNext.isEnabled = !isLoading
             }
 
+            adapter = LikedTracksAdapter()
+            rvLikedTracks.adapter = adapter
+
             btnPlayPause.setOnClickListener {
                 EventsUtil.sendPlayPauseButtonEvent()
             }
@@ -70,6 +75,7 @@ class MainActivity : ComponentActivity(), StandardPermissionsUtil.StandardPermis
 
     private fun collectFlowEvents() {
         lifecycleScope.launch {
+            Log.d(TAG, "MainActivity, collectFlowEvents: 1")
             combine(
                 TrackService.isPlayingSF, TrackService.currentTrackLabelSF
             ) { isPlaying, currentTrackLabel ->
@@ -82,6 +88,14 @@ class MainActivity : ComponentActivity(), StandardPermissionsUtil.StandardPermis
                 binding.tvTrack.text = currentTrackLabel
                 Unit
             }.collect { }
+        }
+
+        lifecycleScope.launch {
+            Log.d(TAG, "MainActivity, collectFlowEvents: before likedTracks collect")
+            viewModel.likedTracksPagedFlow.collect { pagingData ->
+                Log.d(TAG, "MainActivity, collectFlowEvents: pagingData = $pagingData")
+                adapter.submitData(pagingData)
+            }
         }
     }
 

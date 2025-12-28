@@ -6,6 +6,10 @@ import android.util.Log
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
+import androidx.paging.PagingData
+import androidx.paging.cachedIn
 import com.google.gson.Gson
 import com.spotify.android.appremote.api.ConnectionParams
 import com.spotify.android.appremote.api.Connector
@@ -14,12 +18,14 @@ import com.spotify.sdk.android.auth.AuthorizationClient
 import com.spotify.sdk.android.auth.AuthorizationRequest
 import com.spotify.sdk.android.auth.AuthorizationResponse
 import com.truerandom.db.entity.LikedTrackEntity
+import com.truerandom.model.LikedTrackWithCount
 import com.truerandom.repository.LikedSongsApiRepository
 import com.truerandom.repository.LikedSongsDBRepository
 import com.truerandom.repository.SecurePreferencesRepository
 import com.truerandom.service.TrackService
 import com.truerandom.util.EventsUtil
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -58,6 +64,20 @@ class MainViewModel @Inject constructor(
         set(value) {
             toastMsgLD.value = value
         }
+
+    // Paged list for liked tracks
+    val likedTracksPagedFlow: Flow<PagingData<LikedTrackWithCount>> = Pager(
+        config = PagingConfig(
+            pageSize = 60,            // Loads 60 items at a time
+            enablePlaceholders = true, // Shows scrollbar accurately for 20k rows
+            prefetchDistance = 20      // Loads next page when 20 items from bottom
+        ),
+        pagingSourceFactory = {
+            val it = likedSongsDBRepository.getPagedLikedTracks()
+            Log.d(TAG, "MainViewModel, it = $it: ")
+            it
+        }
+    ).flow.cachedIn(viewModelScope)
 
     /**
      * Auth related

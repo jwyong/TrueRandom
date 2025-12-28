@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fitsSystemWindows="true"
     android:background="@color/purple_500"
-    xmlns:app="http://schemas.android.com/apk/res-auto">
+    android:fitsSystemWindows="true"
+    android:orientation="vertical">
 
     <androidx.appcompat.widget.Toolbar
         android:id="@+id/toolbar"
@@ -13,17 +14,17 @@
         android:layout_height="?attr/actionBarSize"
         android:background="@color/purple_500"
         android:elevation="4dp"
-        app:title="@string/app_name"
-        app:titleTextColor="@color/white"
-        app:titleMarginStart="24dp"
-        app:titleMarginEnd="24dp"
         app:contentInsetStart="0dp"
-        app:contentInsetStartWithNavigation="0dp" />
+        app:contentInsetStartWithNavigation="0dp"
+        app:title="@string/app_name"
+        app:titleMarginEnd="24dp"
+        app:titleMarginStart="24dp"
+        app:titleTextColor="@color/white" />
 
     <RelativeLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@color/white">
+        android:background="@color/black">
 
         <ProgressBar
             android:id="@+id/progress_horizontal"
@@ -32,23 +33,42 @@
             android:layout_height="wrap_content"
             android:indeterminate="true" />
 
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvLikedTracks"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_above="@id/tvTrack"
+            android:layout_below="@id/progress_horizontal"
+            android:scrollbars="vertical"
+            app:fastScrollEnabled="true"
+            app:fastScrollVerticalThumbDrawable="@drawable/thumb_drawable"
+            app:fastScrollVerticalTrackDrawable="@drawable/line_drawable"
+            app:fastScrollHorizontalThumbDrawable="@drawable/thumb_drawable"
+            app:fastScrollHorizontalTrackDrawable="@drawable/line_drawable"
+            app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+            tools:listitem="@layout/item_liked_track" />
+
         <TextView
             android:id="@+id/tvTrack"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_above="@id/llBtns"
             android:layout_centerHorizontal="true"
+            android:layout_marginVertical="10dp"
+            android:elevation="10dp"
             android:gravity="center"
             android:textSize="14sp"
-            android:layout_marginBottom="10dp"
             tools:text="ArtistName - TrackName asdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdf" />
 
         <LinearLayout
             android:id="@+id/llBtns"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_alignParentBottom="true"
             android:layout_centerVertical="true"
             android:layout_marginHorizontal="25dp"
+            android:layout_marginBottom="10dp"
+            android:elevation="10dp"
             android:gravity="center_horizontal"
             android:orientation="horizontal">
 
@@ -78,4 +98,4 @@
     </RelativeLayout>
 
 
-</FrameLayout>
+</LinearLayout>

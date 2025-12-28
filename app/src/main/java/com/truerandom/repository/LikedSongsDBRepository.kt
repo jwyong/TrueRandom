@@ -74,4 +74,7 @@ class LikedSongsDBRepository @Inject constructor(
             trackDao.getTrackDetailsByUri(trackUri)
         }
     }
+
+    // paged liked tracks
+    fun getPagedLikedTracks() = trackDao.getPagedLikedTracks()
 }
