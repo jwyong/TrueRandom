@@ -166,8 +166,8 @@ class TrackService: Service() {
 
                 // Increment current track's playCount if needed (for normal playback finished)
                 if (shouldIncrementPlayCount) {
-                    val row = likedSongsDBRepository.incrementTrackPlayCount(currentUri)
-                    Log.d(TAG, "TrackService, playRandomLeastCountTrack: incremented row = $row")
+                    val isIncremented = likedSongsDBRepository.incrementTrackPlayCount(currentUri)
+                    Log.d(TAG, "TrackService, playRandomLeastCountTrack: isIncremented = $isIncremented")
                 }
 
                 // Set current track to previous track

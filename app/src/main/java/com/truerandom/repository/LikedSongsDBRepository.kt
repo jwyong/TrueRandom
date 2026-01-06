@@ -42,7 +42,7 @@ class LikedSongsDBRepository @Inject constructor(
      *
      * @param trackUri The unique Spotify URI of the track that was just played.
      */
-    suspend fun incrementTrackPlayCount(trackUri: String): Int {
+    suspend fun incrementTrackPlayCount(trackUri: String): Boolean {
         return withContext(Dispatchers.IO) {
             // The DAO executes the UPDATE query to increment the count
             trackDao.incrementPlayCount(trackUri)

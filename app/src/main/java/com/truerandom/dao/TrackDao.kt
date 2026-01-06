@@ -5,7 +5,9 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import com.truerandom.db.entity.LikedTrackEntity
+import com.truerandom.db.entity.PlayCountEntity
 import com.truerandom.model.LikedTrackWithCount
 import com.truerandom.model.TrackUIDetails
 
@@ -27,14 +29,33 @@ interface TrackDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(tracks: List<LikedTrackEntity>)
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertNewTrack(playCount: PlayCountEntity): Long
+
+    @Query("UPDATE play_count SET playCount = playCount + 1 WHERE trackUri = :trackUri")
+    suspend fun incrementExistingCount(trackUri: String): Int
+
     /**
-     * Increments the playCount of a specific track identified by its URI.
+     * Increments the playCount of a specific track identified by its URI. Adds a new row with count 1
+     * if the trackUri doesn't exist yet.
      *
      * @param trackUri The unique Spotify URI of the track to update.
      * @return The number of rows updated (should be 1 if successful).
      */
-    @Query("UPDATE play_count SET playCount = playCount + 1 WHERE trackUri = :trackUri")
-    suspend fun incrementPlayCount(trackUri: String): Int
+    @Transaction
+    suspend fun incrementPlayCount(trackUri: String): Boolean {
+        // Try to update existing row first
+        val rowsUpdated = incrementExistingCount(trackUri)
+
+        // If no rows updated, attempt to insert new row with count == 1
+        return if (rowsUpdated == 0) {
+            // Count is incremented if inserted rowId is NON-zero
+            insertNewTrack(PlayCountEntity(trackUri, 1)) != 0L
+        } else {
+            // Always true since updated row is NON-zero
+            true
+        }
+    }
 
     /**
      * OPTIMIZED QUERY: Fetches only the URIs of tracks that have the minimum playCount.
@@ -84,7 +105,7 @@ interface TrackDao {
             COALESCE(pc.playCount, 0) AS playCount
         FROM liked_tracks lt
         LEFT JOIN play_count pc ON lt.trackUri = pc.trackUri
-        ORDER BY pc.playCount ASC
+        ORDER BY playCount ASC, lt.trackName ASC
     """)
     fun getPagedLikedTracks(): PagingSource<Int, LikedTrackWithCount>
 }
