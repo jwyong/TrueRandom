@@ -3,13 +3,13 @@ package com.truerandom.service
 import android.app.Service
 import android.content.Intent
 import android.os.IBinder
-import android.util.Log
 import com.spotify.android.appremote.api.SpotifyAppRemote
 import com.truerandom.R
 import com.truerandom.repository.LikedSongsDBRepository
 import com.truerandom.repository.SecurePreferencesRepository
 import com.truerandom.ui.TAG
 import com.truerandom.util.EventsUtil
+import com.truerandom.util.LogUtil
 import com.truerandom.util.NotificationUtil
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -36,8 +36,9 @@ class TrackService: Service() {
     override fun onCreate() {
         super.onCreate()
 
-        Log.d("JAY_LOG", "TrackService, onCreate: ")
+        LogUtil.d("JAY_LOG", "TrackService, onCreate: ")
 
+        collectPlayTrackEvent()
         collectPlayPauseBtnEvent()
         collectPrevNextBtnEvent()
         collectCurrentTrackEndedEvent()
@@ -49,7 +50,7 @@ class TrackService: Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d("JAY_LOG", "TrackService, onStartCommand: ")
+        LogUtil.d("JAY_LOG", "TrackService, onStartCommand: ")
 
         // Start foreground service as normal first
         startForeground(
@@ -66,24 +67,40 @@ class TrackService: Service() {
     /**
      * Flow event collectors
      **/
+    // Specific track tapped - play that track immediately
+    private fun collectPlayTrackEvent() {
+        collectScope.launch {
+            EventsUtil.playTrackEventFlow.flow.collect { trackUri ->
+                LogUtil.d(TAG, "TrackService, playTrackEventFlow trackUri = $trackUri")
+
+                // Set the trackUri to currentTrackUri, then play it
+                currentTrackUri = trackUri
+                playCurrentTrackUri()
+
+                // Update UI
+                isPlaying = true
+            }
+        }
+    }
+
     // Start or pause playback btn clicked (from mainActivity OR notification)
     private fun collectPlayPauseBtnEvent() {
         collectScope.launch {
             EventsUtil.playPauseButtonEventFlow.flow.collect {
-                Log.d(TAG, "TrackService, collectPlayPauseBtnEvent: isPlaying = ${isPlaying}")
+                LogUtil.d(TAG, "TrackService, playPauseButtonEventFlow: isPlaying = $isPlaying")
 
                 if (isPlaying) {
                     mSpotifyAppRemote?.playerApi?.pause()
                 } else {
                     currentTrackUri?.let {
-                        Log.d(
+                        LogUtil.d(
                             TAG,
                             "TrackService, collectPlayPauseBtnEvent: currentTrack available, resuming..."
                         )
                         // Resume playback if already has uri
                         mSpotifyAppRemote?.playerApi?.resume()
                     }?: run {
-                        Log.d(
+                        LogUtil.d(
                             TAG,
                             "TrackService, collectPlayPauseBtnEvent: no currentTrack, starting new playback..."
                         )
@@ -100,7 +117,7 @@ class TrackService: Service() {
     private fun collectPrevNextBtnEvent() {
         collectScope.launch {
             EventsUtil.prevNextButtonEventFlow.flow.collect { isNext ->
-                Log.d(TAG, "TrackService, collectPrevNextBtnEvent: isNext = $isNext")
+                LogUtil.d(TAG, "TrackService, collectPrevNextBtnEvent: isNext = $isNext")
 
                 if (isNext) {
                     // Next - just play random track WITHOUT incrementing
@@ -122,7 +139,7 @@ class TrackService: Service() {
     private fun collectCurrentTrackEndedEvent() {
         collectScope.launch {
             EventsUtil.trackPlaybackEndEventFlow.flow.collect {
-                Log.d(TAG, "TrackService, collectCurrentTrackEndedEvent: ")
+                LogUtil.d(TAG, "TrackService, trackPlaybackEndEventFlow: ")
 
                 playRandomLeastCountTrack(true)
             }
@@ -158,21 +175,21 @@ class TrackService: Service() {
      **/
     private fun playRandomLeastCountTrack(shouldIncrementPlayCount: Boolean) {
         defaultScope.launch {
-            Log.d(TAG, "TrackService, playRandomLowCountTrack: ")
+            LogUtil.d(TAG, "TrackService, playRandomLowCountTrack: ")
 
             // Check if current uri available
             currentTrackUri?.let { currentUri ->
-                Log.d(TAG, "TrackService, playRandomLowCountTrack: currentTrack available")
+                LogUtil.d(TAG, "TrackService, playRandomLowCountTrack: currentTrack available")
 
                 // Increment current track's playCount if needed (for normal playback finished)
                 if (shouldIncrementPlayCount) {
                     val isIncremented = likedSongsDBRepository.incrementTrackPlayCount(currentUri)
-                    Log.d(TAG, "TrackService, playRandomLeastCountTrack: isIncremented = $isIncremented")
+                    LogUtil.d(TAG, "TrackService, playRandomLeastCountTrack: isIncremented = $isIncremented")
                 }
 
                 // Set current track to previous track
                 previousTrackUri = currentTrackUri
-                Log.d(
+                LogUtil.d(
                     TAG,
                     "TrackService, playRandomLeastCountTrack: previousTrack = $previousTrackUri"
                 )
@@ -180,7 +197,7 @@ class TrackService: Service() {
 
             // Get random uri and set to currentUri
             currentTrackUri = likedSongsDBRepository.getRandomLeastPlayedTrackUri()
-            Log.d(
+            LogUtil.d(
                 TAG,
                 "TrackService, playRandomLeastCountTrack: currentTrackUri = $currentTrackUri"
             )
@@ -191,14 +208,14 @@ class TrackService: Service() {
     }
 
     private fun playCurrentTrackUri() {
-        Log.d(TAG, "TrackService, playCurrentTrackUri: start playing $currentTrackUri")
+        LogUtil.d(TAG, "TrackService, playCurrentTrackUri: start playing $currentTrackUri")
 
         mSpotifyAppRemote?.playerApi
             ?.play(currentTrackUri)
             ?.setResultCallback {
                 // SUCCESS: The command was successfully sent to the Spotify client,
                 // and the client has acknowledged it and started playback.
-                Log.d(TAG, "playCurrentTrackUri: Successfully started playing URI: $currentTrackUri")
+                LogUtil.d(TAG, "TrackService, playCurrentTrackUri: Successfully started playing URI: $currentTrackUri")
 
                 // Reset trackEnd detected boolean
                 hasDetectedTrackEnd = false
@@ -221,12 +238,14 @@ class TrackService: Service() {
                         currentTrackLabel = "$trackName - $trackArtists"
                     }
                 }
+            }?.setErrorCallback { throwable ->
+                LogUtil.d(TAG, "playCurrentTrackUri error: ${throwable.message}")
             }
     }
 
     override fun onDestroy() {
         // Stop playing track onDestroy
-        Log.d(TAG, "TrackService, onDestroy: pausing playback...")
+        LogUtil.d(TAG, "TrackService, onDestroy: pausing playback...")
         mSpotifyAppRemote?.playerApi?.pause()
 
         super.onDestroy()
@@ -257,7 +276,12 @@ class TrackService: Service() {
             set(value) { _currentTrackLabelSF.value = value }
 
         var previousTrackUri: String? = null
-        var currentTrackUri: String? = null
+
+        private val _currentTrackUriSF = MutableStateFlow<String?>(null)
+        val currentTrackUriSF: StateFlow<String?> = _currentTrackUriSF.asStateFlow()
+        var currentTrackUri: String?
+            get() = _currentTrackUriSF.value
+            set(value) { _currentTrackUriSF.value = value }
 
         // Debounce for playState subscription
         var hasDetectedTrackEnd = false

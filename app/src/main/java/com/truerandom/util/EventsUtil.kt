@@ -1,6 +1,12 @@
 package com.truerandom.util
 
 object EventsUtil {
+    // When a specific track is tapped
+    val playTrackEventFlow = BroadcastFlow<String>()
+    fun sendPlayTrackEvent(trackUri: String) {
+        playTrackEventFlow.tryEmit(trackUri)
+    }
+
     // When buttons are tapped
     val playPauseButtonEventFlow = BroadcastFlow<Unit>()
     fun sendPlayPauseButtonEvent() {

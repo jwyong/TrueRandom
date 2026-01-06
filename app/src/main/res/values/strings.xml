@@ -11,4 +11,7 @@
 
     <string name="unknown">Unknown</string>
     <string name="local">Local &#183;\u0020</string>
+
+    <string name="menu_logs">Logs</string>
+    <string name="menu_resync">Re-sync</string>
 </resources>

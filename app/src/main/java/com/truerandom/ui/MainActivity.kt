@@ -7,6 +7,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import android.view.View
+import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -15,6 +16,7 @@ import com.spotify.sdk.android.auth.AuthorizationClient
 import com.truerandom.R
 import com.truerandom.databinding.ActivityMainBinding
 import com.truerandom.service.TrackService
+import com.truerandom.ui.logs.LogsActivity
 import com.truerandom.util.EventsUtil
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.combine
@@ -34,6 +36,7 @@ class MainActivity : AppCompatActivity(), StandardPermissionsUtil.StandardPermis
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        setupToolbar()
         bindUi()
         collectFlowEvents()
 
@@ -45,6 +48,24 @@ class MainActivity : AppCompatActivity(), StandardPermissionsUtil.StandardPermis
         viewModel.attemptAppRemoteConnect(this)
     }
 
+    private fun setupToolbar() {
+        binding.toolbar.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                R.id.action_logs -> {
+                    startActivity(Intent(this, LogsActivity::class.java))
+                    true
+                }
+                R.id.action_resync -> {
+                    lifecycleScope.launch {
+                        viewModel.syncLikedTracksInRoom()
+                    }
+                    true
+                }
+                else -> false
+            }
+        }
+    }
+
     private fun bindUi() {
         with(binding) {
             viewModel.isLoadingLD.observe(this@MainActivity) { isLoading ->
@@ -54,6 +75,12 @@ class MainActivity : AppCompatActivity(), StandardPermissionsUtil.StandardPermis
                 btnPrev.isEnabled = !isLoading
                 btnPlayPause.isEnabled = !isLoading
                 btnNext.isEnabled = !isLoading
+            }
+
+            viewModel.toastMsgLD.observe(this@MainActivity) { toastMsg ->
+                if (toastMsg.isNotBlank()) {
+                    Toast.makeText(this@MainActivity, toastMsg, Toast.LENGTH_LONG).show()
+                }
             }
 
             adapter = LikedTracksAdapter()
@@ -75,7 +102,6 @@ class MainActivity : AppCompatActivity(), StandardPermissionsUtil.StandardPermis
 
     private fun collectFlowEvents() {
         lifecycleScope.launch {
-            Log.d(TAG, "MainActivity, collectFlowEvents: 1")
             combine(
                 TrackService.isPlayingSF, TrackService.currentTrackLabelSF
             ) { isPlaying, currentTrackLabel ->
@@ -90,10 +116,16 @@ class MainActivity : AppCompatActivity(), StandardPermissionsUtil.StandardPermis
             }.collect { }
         }
 
+        // Currently playing track text colour
         lifecycleScope.launch {
-            Log.d(TAG, "MainActivity, collectFlowEvents: before likedTracks collect")
+            TrackService.currentTrackUriSF.collect { currentTrackUri ->
+                adapter.setCurrentPlayingUri(currentTrackUri)
+            }
+        }
+
+        // Tracks paged list
+        lifecycleScope.launch {
             viewModel.likedTracksPagedFlow.collect { pagingData ->
-                Log.d(TAG, "MainActivity, collectFlowEvents: pagingData = $pagingData")
                 adapter.submitData(pagingData)
             }
         }

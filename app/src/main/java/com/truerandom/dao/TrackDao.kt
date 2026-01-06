@@ -21,6 +21,9 @@ interface TrackDao {
     @Query("SELECT COUNT(trackUri) FROM liked_tracks")
     suspend fun getTrackCount(): Int
 
+    @Query("DELETE FROM liked_tracks")
+    suspend fun deleteAllTracks()
+
     /**
      * Inserts a list of LikedTrackEntity objects into the database.
      * If a conflict occurs (based on the primary key, which is the track ID),
@@ -105,7 +108,7 @@ interface TrackDao {
             COALESCE(pc.playCount, 0) AS playCount
         FROM liked_tracks lt
         LEFT JOIN play_count pc ON lt.trackUri = pc.trackUri
-        ORDER BY playCount ASC, lt.trackName ASC
+        ORDER BY lt.addedAt DESC
     """)
     fun getPagedLikedTracks(): PagingSource<Int, LikedTrackWithCount>
 }
