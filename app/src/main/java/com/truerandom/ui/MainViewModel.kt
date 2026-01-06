@@ -24,6 +24,7 @@ import com.truerandom.repository.LikedSongsDBRepository
 import com.truerandom.repository.SecurePreferencesRepository
 import com.truerandom.service.TrackService
 import com.truerandom.util.EventsUtil
+import com.truerandom.util.LogUtil
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
@@ -74,7 +75,7 @@ class MainViewModel @Inject constructor(
         ),
         pagingSourceFactory = {
             val it = likedSongsDBRepository.getPagedLikedTracks()
-            Log.d(TAG, "MainViewModel, it = $it: ")
+            LogUtil.d(TAG, "MainViewModel, it = $it: ")
             it
         }
     ).flow.cachedIn(viewModelScope)
@@ -84,19 +85,20 @@ class MainViewModel @Inject constructor(
      **/
     // Entry point to fetch liked songs using access token
     fun checkAndFetchLikedTracks(activity: Activity) {
-        Log.d(TAG, "MainViewModel, checkAndFetchLikedTracks: ")
+        LogUtil.d(TAG, "MainViewModel, checkAndFetchLikedTracks: ")
 
         // Check if accessToken is still valid
         if (isAccessTokenValid()) {
-            // Still valid - just do next step (sync liked songs using accessToken in SP)
-            Log.d(
+            // Still valid - get accessToken from sharedPrefs and do stuff
+            LogUtil.d(
                 TAG,
                 "MainViewModel, checkAndFetchLikedTracks: accessToken valid, checking liked songs..."
             )
-            syncLikedTracksInRoom()
+            accessToken = preferencesRepository.getAccessToken()
+            checkFirstTimeSync()
         } else {
             // Invalid - get new token (user needs to auth again)
-            Log.d(
+            LogUtil.d(
                 TAG,
                 "MainViewModel, checkAndFetchLikedTracks: accessToken invalid, starting auth flow..."
             )
@@ -106,7 +108,9 @@ class MainViewModel @Inject constructor(
 
     // Check if accessToken is valid (available and NOT expired)
     private fun isAccessTokenValid(): Boolean {
-        return preferencesRepository.getAccessTokenExpireTimestamp() > System.currentTimeMillis()
+        val tokenExpiry = preferencesRepository.getAccessTokenExpireTimestamp()
+        val currentTime = System.currentTimeMillis()
+        return tokenExpiry > currentTime
     }
 
     // Start get access token (user needs to auth)
@@ -126,7 +130,7 @@ class MainViewModel @Inject constructor(
 
     // After user auth (activity result)
     fun onAuthActivityResult(response: AuthorizationResponse) {
-        Log.d(TAG, "Authorization Response Parsed. Type: ${response.type.name}")
+        LogUtil.d(TAG, "Authorization Response Parsed. Type: ${response.type.name}")
 
         when (response.type) {
             AuthorizationResponse.Type.TOKEN -> {
@@ -139,7 +143,7 @@ class MainViewModel @Inject constructor(
                 preferencesRepository.saveAccessTokenExpireTimestamp(accessTokenExpireTimestamp)
 
                 // Start syncing like songs to Room db
-                syncLikedTracksInRoom()
+                checkFirstTimeSync()
             }
 
             AuthorizationResponse.Type.ERROR -> {
@@ -159,65 +163,81 @@ class MainViewModel @Inject constructor(
         isLoading = false
     }
 
-    // Start syncing liked tracks from API to Room DB
-    private fun syncLikedTracksInRoom() {
-        // Fetch full list if DB not synced yet
+    private fun checkFirstTimeSync() {
         viewModelScope.launch {
+            // Fetch full list if DB not synced yet
             if (!likedSongsDBRepository.isLikedSongsSynced()) {
-                isLoading = true
-
-                Log.d(
-                    TAG,
-                    "MainViewModel, syncLikedTracksInRoom: liked songs not synced, starting paged fetching..."
-                )
-
-                var url: String? = "https://api.spotify.com/v1/me/tracks?limit=50"
-
-                // Keep looking until returned url is null (reached end of list)
-                while (url != null) {
-                    Log.d(TAG, "MainViewModel, syncLikedTracksInRoom: url = $url")
-
-                    val response = likedSongsApiRepository.fetchLikedSongsPage(
-                        accessToken ?: return@launch, url
-                    )
-                    Log.d(
-                        TAG,
-                        "MainViewModel, syncLikedTracksInRoom: resp items count = ${response.items?.count()}"
-                    )
-
-                    // Map items to entity
-                    response.items?.mapNotNull { item ->
-                        item.track?.let { track ->
-                            track.uri?.let { uri ->
-                                LikedTrackEntity(
-                                    trackUri = uri,
-                                    trackName = track.name,
-                                    artistName = track.formatArtistNames(),
-                                    isLocal = track.isLocal,
-                                    isPlayable = track.isPlayable,
-                                    addedAt = item.addedAt
-                                )
-                            }
-                        }
-                    }?.let { likedTrackEntityList ->
-                        // Batch insert to DB
-                        Log.d(
-                            TAG,
-                            "MainViewModel, syncLikedTracksInRoom: likedTrackEntityList count = ${likedTrackEntityList.count()}"
-                        )
-                        likedSongsDBRepository.saveLikedTracks(likedTrackEntityList)
-                    }
-
-                    // Update url for next paged request
-                    url = response.next
-                    Log.d(TAG, "MainViewModel, syncLikedTracksInRoom: url updated to $url")
-                }
-
-                Log.d(TAG, "MainViewModel, syncLikedTracksInRoom: done fetching liked songs")
-
-                isLoading = false
+                syncLikedTracksInRoom()
             }
         }
+    }
+
+    // Start syncing liked tracks from API to Room DB
+    suspend fun syncLikedTracksInRoom() {
+        isLoading = true
+
+        LogUtil.d(
+            TAG,
+            "MainViewModel, syncLikedTracksInRoom: starting paged fetching..."
+        )
+
+        // Clear all tracks in liked tracks table first
+        likedSongsDBRepository.deleteAllLikedTracks()
+
+        var url: String? = "https://api.spotify.com/v1/me/tracks?limit=50"
+
+        var totalTracks: Int? = null
+
+        // Keep looking until returned url is null (reached end of list)
+        while (url != null) {
+            val response = likedSongsApiRepository.fetchLikedSongsPage(
+                accessToken ?: return, url
+            )
+            LogUtil.d(
+                TAG,
+                "MainViewModel, syncing ${response.items?.count()} of ${response.total}"
+            )
+
+            // Show toast for first iteration
+            if (totalTracks != response.total) {
+                totalTracks = response.total
+                toastMsg = "Syncing $totalTracks tracks..."
+            }
+
+            // Map items to entity
+            response.items?.mapNotNull { item ->
+                item.track?.let { track ->
+                    track.uri?.let { uri ->
+                        LikedTrackEntity(
+                            trackUri = uri,
+                            trackName = track.name,
+                            artistName = track.formatArtistNames(),
+                            isLocal = track.isLocal,
+                            isPlayable = track.isPlayable,
+                            addedAt = item.addedAt,
+
+                            // Use first url in album images list as cover
+                            albumCoverUrl = track.album?.images?.firstOrNull()?.url
+                        )
+                    }
+                }
+            }?.let { likedTrackEntityList ->
+                // Batch insert to DB
+                Log.d(
+                    TAG,
+                    "MainViewModel, likedTrackEntityList count = ${likedTrackEntityList.count()}"
+                )
+                likedSongsDBRepository.saveLikedTracks(likedTrackEntityList)
+            }
+
+            // Update url for next paged request
+            url = response.next
+            Log.d(TAG, "MainViewModel, url updated to $url")
+        }
+
+        Log.d(TAG, "MainViewModel, done fetching liked songs")
+
+        isLoading = false
     }
 
     /**
@@ -225,7 +245,7 @@ class MainViewModel @Inject constructor(
      **/
     // Connect appRemote - this must be done before auth
     fun attemptAppRemoteConnect(context: Context) {
-        Log.d(TAG, "MainActivityViewModel, attemptAppRemoteConnect:")
+        LogUtil.d(TAG, "MainActivityViewModel, attemptAppRemoteConnect:")
 
         // Use showAuthView(true) to implicitly re-authorize the user without a full login screen
         val connectionParams = ConnectionParams.Builder(CLIENT_ID)
@@ -236,7 +256,7 @@ class MainViewModel @Inject constructor(
         // Connect
         SpotifyAppRemote.connect(context, connectionParams, object : Connector.ConnectionListener {
             override fun onConnected(spotifyAppRemote: SpotifyAppRemote) {
-                Log.d(TAG, "MainViewModel, attemptAppRemoteConnect onConnected: ")
+                LogUtil.d(TAG, "MainViewModel, attemptAppRemoteConnect onConnected: ")
 
                 // Set instance to sticky service
                 TrackService.mSpotifyAppRemote = spotifyAppRemote
@@ -261,26 +281,36 @@ class MainViewModel @Inject constructor(
             ?.setEventCallback { playerState ->
                 val track = playerState.track
                 if (track != null) {
-                    // TODO: JAY_LOG - remove this log when done
                     // Log and update your UI/Service state with the new track and position
-                    Log.d(
+                    LogUtil.d(
                         TAG,
                         "Player State: Track ID: ${track.uri} - isPaused: ${playerState.isPaused}, " +
                                 "position = ${playerState.playbackPosition}"
                     )
 
-                    // Playback ended when isPause = true AND position = 0
-                    if (playerState.isPaused && playerState.playbackPosition == 0L) {
-                        if (TrackService.hasDetectedTrackEnd) return@setEventCallback
+                    // Paused - check playback position
+                    if (playerState.isPaused) {
 
-                        Log.d(TAG, "Track ${track.name} is ending. Trigger next track logic.")
-                        TrackService.hasDetectedTrackEnd = true
+                        // Position == 0, this track is done - play next random track
+                        if (playerState.playbackPosition == 0L) {
+                            if (TrackService.hasDetectedTrackEnd) return@setEventCallback
 
-                        EventsUtil.sendTrackPlaybackEndEvent()
+                            LogUtil.d(TAG, "Track ${track.name} is ending. Trigger next track logic.")
+                            TrackService.hasDetectedTrackEnd = true
+
+                            EventsUtil.sendTrackPlaybackEndEvent()
+                        } else {
+                            // Position NOT 0 - just update UI to PAUSED
+                            TrackService.isPlaying = false
+                        }
+
+                    } else {
+                        // Player changed to PLAY - don't do anything for now
                     }
                 }
             }?.setErrorCallback { error ->
                 Log.e(TAG, "subscribeToPlayerState: error = ", error)
+                toastMsg = "Error while subscribing to playerState: ${error.message}"
             }
     }
 }

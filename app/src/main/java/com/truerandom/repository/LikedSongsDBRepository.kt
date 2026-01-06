@@ -18,10 +18,16 @@ import javax.inject.Singleton
 class LikedSongsDBRepository @Inject constructor(
     private val trackDao: TrackDao
 ) {
-    // Check if already synced liked songs (TODO: JAY_LOG - for now just check count)
+    // Check if already synced liked songs
     suspend fun isLikedSongsSynced(): Boolean {
         return withContext(Dispatchers.IO) {
             trackDao.getTrackCount() > 0
+        }
+    }
+
+    suspend fun deleteAllLikedTracks() {
+        withContext(Dispatchers.IO) {
+            trackDao.deleteAllTracks()
         }
     }
 
