@@ -86,7 +86,7 @@ interface TrackDao {
      * @return LikedTrackEntity object containing the requested fields, or null if not found.
      */
     @Query("""
-        SELECT trackName, artistName, albumCoverUrl 
+        SELECT trackName, artistName, albumCoverUrl, durationMs
         FROM liked_tracks 
         WHERE trackUri = :uri
         LIMIT 1
@@ -103,12 +103,13 @@ interface TrackDao {
             lt.trackName, 
             lt.artistName, 
             lt.albumCoverUrl, 
-            lt.isLocal, 
+            lt.isLocal,
             lt.addedAt,
+            lt.durationMs,
             COALESCE(pc.playCount, 0) AS playCount
         FROM liked_tracks lt
         LEFT JOIN play_count pc ON lt.trackUri = pc.trackUri
-        ORDER BY lt.addedAt DESC
+        ORDER BY lt.trackName ASC
     """)
-    fun getPagedLikedTracks(): PagingSource<Int, LikedTrackWithCount>
+    fun getPagedLikedTracksWithCount(): PagingSource<Int, LikedTrackWithCount>
 }

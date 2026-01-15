@@ -1,7 +1,6 @@
 package com.truerandom.ui
 
 import android.view.LayoutInflater
-import android.view.View
 import android.view.ViewGroup
 import androidx.paging.PagingDataAdapter
 import androidx.recyclerview.widget.DiffUtil
@@ -11,6 +10,7 @@ import com.truerandom.R
 import com.truerandom.databinding.ItemLikedTrackBinding
 import com.truerandom.model.LikedTrackWithCount
 import com.truerandom.util.EventsUtil
+import com.truerandom.util.FormatUtil.toFormattedTime
 
 class LikedTracksAdapter : PagingDataAdapter<LikedTrackWithCount, LikedTracksAdapter.TrackViewHolder>(
     DiffCallback
@@ -59,8 +59,8 @@ class LikedTracksAdapter : PagingDataAdapter<LikedTrackWithCount, LikedTracksAda
                 tvArtist.text = track.artistName
                 tvPlayCount.text = track.playCount.toString()
 
-                // Toggle "Local" dot visibility
-                tvLocal.visibility = if (track.isLocal == true) View.VISIBLE else View.GONE
+                // Format duration text from ms
+                tvDuration.text = track.durationMs.toFormattedTime()
 
                 updateColors(isPlaying)
 
@@ -92,7 +92,7 @@ class LikedTracksAdapter : PagingDataAdapter<LikedTrackWithCount, LikedTracksAda
             val textColour = binding.root.context.getColor(textColourId)
             with (binding) {
                 tvTitle.setTextColor(textColour)
-                tvLocal.setTextColor(textColour)
+                tvDuration.setTextColor(textColour)
                 tvArtist.setTextColor(textColour)
                 tvPlayCount.setTextColor(textColour)
             }

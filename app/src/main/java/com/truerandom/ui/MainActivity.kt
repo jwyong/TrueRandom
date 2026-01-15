@@ -5,7 +5,6 @@ import android.app.Activity
 import android.app.ComponentCaller
 import android.content.Intent
 import android.os.Bundle
-import android.util.Log
 import android.view.View
 import android.widget.Toast
 import androidx.activity.viewModels
@@ -139,32 +138,21 @@ class MainActivity : AppCompatActivity(), StandardPermissionsUtil.StandardPermis
     ) {
         super.onActivityResult(requestCode, resultCode, data, caller)
 
-        Log.d(
-            TAG,
-            "MainActivity, onActivityResult: requestCode = $requestCode, resultCode = $resultCode, data = $data"
-        )
-
         if (requestCode == AUTH_REQUEST_CODE && resultCode == Activity.RESULT_OK) {
             val response = AuthorizationClient.getResponse(resultCode, data)
 
-            Log.d(TAG, "MainActivity, onActivityResult: response = $response")
             viewModel.onAuthActivityResult(response)
         }
     }
 
     override fun onStandardPermissionsGranted(requestCode: Int) {
-        Log.d("JAY_LOG", "MainActivity, onStandardPermissionsGranted: requestCode = $requestCode")
-
         startTrackService()
     }
 
     override fun onStandardPermissionsDenied(requestCode: Int) {
-        Log.d("JAY_LOG", "MainActivity, onStandardPermissionsDenied: requestCode = $requestCode")
     }
 
     private fun startTrackService() {
-        Log.d("JAY_LOG", "MainActivity, startTrackService: ")
-
         val serviceIntent = Intent(this, TrackService::class.java)
         ContextCompat.startForegroundService(this, serviceIntent)
     }

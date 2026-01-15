@@ -17,7 +17,7 @@ import com.truerandom.db.entity.PlayCountEntity
  */
 @Database(
     entities = [LikedTrackEntity::class, PlayCountEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -69,6 +69,15 @@ abstract class AppDatabase : RoomDatabase() {
                 // 5. Delete the old table and rename the new one
                 db.execSQL("DROP TABLE liked_tracks")
                 db.execSQL("ALTER TABLE liked_tracks_new RENAME TO liked_tracks")
+            }
+        }
+
+        // v2 to v3: add "durationMs" Long column for playback end detection fallback
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE liked_tracks ADD COLUMN durationMs INTEGER"
+                )
             }
         }
     }

@@ -1,8 +1,14 @@
 package com.truerandom.service
 
 import android.app.Service
+import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
+import android.media.session.MediaController
+import android.media.session.MediaSessionManager
+import android.media.session.PlaybackState
 import android.os.IBinder
+import android.provider.Settings
 import com.spotify.android.appremote.api.SpotifyAppRemote
 import com.truerandom.R
 import com.truerandom.repository.LikedSongsDBRepository
@@ -23,7 +29,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
-class TrackService: Service() {
+class TrackService : Service() {
     @Inject
     lateinit var likedSongsDBRepository: LikedSongsDBRepository
 
@@ -33,10 +39,84 @@ class TrackService: Service() {
     // Dedicated Default scope for all other operations
     private val defaultScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+    /**
+     * System media event callback related
+     **/
+    // TODO: JAY_LOG - tidy up code + improve pause / play logics, permissions, etc
+    private var spotifyController: MediaController? = null
+
+    // 1. Define the Callback
+    private val mediaCallback = object : MediaController.Callback() {
+        override fun onPlaybackStateChanged(state: PlaybackState?) {
+            state ?: return
+
+            val isPaused = state.state == PlaybackState.STATE_PAUSED
+            val playbackPosition = state.position
+
+            if (isPaused) {
+                // Position == 0, this track is done - play next random track
+                if (playbackPosition == 0L) {
+                    if (hasDetectedTrackEnd) return
+
+                    LogUtil.d(TAG, "TrackService: onPlaybackStateChanged - $currentTrackLabel is ending. Trigger next track logic.")
+
+                    hasDetectedTrackEnd = true
+
+                    playRandomLeastCountTrack(true)
+
+                } else {
+                    LogUtil.d(TAG, "TrackService: onPlaybackStateChanged - $currentTrackLabel paused.")
+
+                    // Position NOT 0 - just update UI to PAUSED
+                    isPlaying = false
+                }
+
+            } else {
+                // Player changed to PLAY - don't do anything for now
+            }
+        }
+    }
+
+    // 2. Function to find and bind to Spotify
+    private fun connectToSpotifyController() {
+        if (!isNotificationServiceEnabled()) {
+            val intent = Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
+        }
+
+        if (!isNotificationServiceEnabled()) {
+            LogUtil.d(TAG, "Cannot bind to Spotify: Notification Access not granted.")
+            // Optionally: Trigger the settings Intent here (see step 3)
+            return
+        }
+
+        try {
+            val mm = getSystemService(Context.MEDIA_SESSION_SERVICE) as MediaSessionManager
+            val componentName = ComponentName(this, MediaNotificationListener::class.java)
+
+            // This is the line that throws the SecurityException if not permitted
+            val sessions = mm.getActiveSessions(componentName)
+            val spotify = sessions.find { it.packageName == "com.spotify.music" }
+
+            if (spotify != null) {
+                spotifyController = spotify
+                spotifyController?.registerCallback(mediaCallback)
+                LogUtil.d(TAG, "Successfully bound to Spotify System Events")
+            }
+        } catch (e: SecurityException) {
+            LogUtil.d(TAG, "SecurityException: Still missing permission! ${e.message}")
+        }
+    }
+
+    private fun isNotificationServiceEnabled(): Boolean {
+        val pkgName = packageName
+        val flat = Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
+        return flat != null && flat.contains(pkgName)
+    }
+
     override fun onCreate() {
         super.onCreate()
-
-        LogUtil.d("JAY_LOG", "TrackService, onCreate: ")
 
         collectPlayTrackEvent()
         collectPlayPauseBtnEvent()
@@ -47,11 +127,11 @@ class TrackService: Service() {
 
         // Show foreground notification
         NotificationUtil.createNotificationChannel(this)
+
+        connectToSpotifyController()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        LogUtil.d("JAY_LOG", "TrackService, onStartCommand: ")
-
         // Start foreground service as normal first
         startForeground(
             NotificationUtil.NOTIFICATION_ID, NotificationUtil.createNotification(this)
@@ -99,7 +179,7 @@ class TrackService: Service() {
                         )
                         // Resume playback if already has uri
                         mSpotifyAppRemote?.playerApi?.resume()
-                    }?: run {
+                    } ?: run {
                         LogUtil.d(
                             TAG,
                             "TrackService, collectPlayPauseBtnEvent: no currentTrack, starting new playback..."
@@ -184,7 +264,10 @@ class TrackService: Service() {
                 // Increment current track's playCount if needed (for normal playback finished)
                 if (shouldIncrementPlayCount) {
                     val isIncremented = likedSongsDBRepository.incrementTrackPlayCount(currentUri)
-                    LogUtil.d(TAG, "TrackService, playRandomLeastCountTrack: isIncremented = $isIncremented")
+                    LogUtil.d(
+                        TAG,
+                        "TrackService, playRandomLeastCountTrack: isIncremented = $isIncremented"
+                    )
                 }
 
                 // Set current track to previous track
@@ -266,14 +349,18 @@ class TrackService: Service() {
         val isPlayingSF: StateFlow<Boolean> = _isPlayingSF.asStateFlow()
         var isPlaying: Boolean
             get() = _isPlayingSF.value
-            set(value) { _isPlayingSF.value = value }
+            set(value) {
+                _isPlayingSF.value = value
+            }
 
         // Label: <trackName> - <trackArtists>
         private val _currentTrackLabelSF = MutableStateFlow("")
         val currentTrackLabelSF: StateFlow<String> = _currentTrackLabelSF.asStateFlow()
         var currentTrackLabel: String
             get() = _currentTrackLabelSF.value
-            set(value) { _currentTrackLabelSF.value = value }
+            set(value) {
+                _currentTrackLabelSF.value = value
+            }
 
         var previousTrackUri: String? = null
 
@@ -281,7 +368,9 @@ class TrackService: Service() {
         val currentTrackUriSF: StateFlow<String?> = _currentTrackUriSF.asStateFlow()
         var currentTrackUri: String?
             get() = _currentTrackUriSF.value
-            set(value) { _currentTrackUriSF.value = value }
+            set(value) {
+                _currentTrackUriSF.value = value
+            }
 
         // Debounce for playState subscription
         var hasDetectedTrackEnd = false
