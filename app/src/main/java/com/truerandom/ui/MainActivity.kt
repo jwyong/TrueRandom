@@ -17,6 +17,7 @@ import com.truerandom.databinding.ActivityMainBinding
 import com.truerandom.service.TrackService
 import com.truerandom.ui.logs.LogsActivity
 import com.truerandom.util.EventsUtil
+import com.truerandom.util.LogUtil
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
@@ -31,6 +32,8 @@ class MainActivity : AppCompatActivity(), StandardPermissionsUtil.StandardPermis
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        LogUtil.d(TAG, "MainActivity: onCreate")
 
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)

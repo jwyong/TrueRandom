@@ -67,7 +67,8 @@ interface TrackDao {
      *
      * @return A list of track URIs (String) sharing the lowest play count.
      */
-    @Query("""
+    @Query(
+        """
         SELECT lt.trackUri 
         FROM liked_tracks lt
         LEFT JOIN play_count pc ON lt.trackUri = pc.trackUri
@@ -76,7 +77,8 @@ interface TrackDao {
             FROM liked_tracks lt2
             LEFT JOIN play_count pc2 ON lt2.trackUri = pc2.trackUri
         )
-    """)
+    """
+    )
     suspend fun getLeastPlayedTrackUris(): List<String>
 
     /**
@@ -85,19 +87,28 @@ interface TrackDao {
      * * @param uri The unique identifier (trackUri) for the track.
      * @return LikedTrackEntity object containing the requested fields, or null if not found.
      */
-    @Query("""
-        SELECT trackName, artistName, albumCoverUrl, durationMs
-        FROM liked_tracks 
-        WHERE trackUri = :uri
+    @Query(
+        """
+        SELECT 
+            lt.trackName, 
+            lt.artistName, 
+            lt.albumCoverUrl, 
+            lt.durationMs,
+            IFNULL(pc.playCount, 0) AS playCount  -- Select the actual column from the joined table
+        FROM liked_tracks lt
+        LEFT JOIN play_count pc ON lt.trackUri = pc.trackUri
+        WHERE lt.trackUri = :uri
         LIMIT 1
-    """)
+        """
+    )
     suspend fun getTrackDetailsByUri(uri: String): TrackUIDetails?
 
     /**
      * Get a paged list of liked tracks along with play count, to be displayed on main page liked
      * tracks (paged)
      **/
-    @Query("""
+    @Query(
+        """
         SELECT 
             lt.trackUri, 
             lt.trackName, 
@@ -109,7 +120,8 @@ interface TrackDao {
             COALESCE(pc.playCount, 0) AS playCount
         FROM liked_tracks lt
         LEFT JOIN play_count pc ON lt.trackUri = pc.trackUri
-        ORDER BY lt.trackName ASC
-    """)
+        ORDER BY pc.playCount ASC, lt.trackName ASC
+    """
+    )
     fun getPagedLikedTracksWithCount(): PagingSource<Int, LikedTrackWithCount>
 }

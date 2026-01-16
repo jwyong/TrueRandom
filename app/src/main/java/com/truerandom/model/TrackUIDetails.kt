@@ -5,5 +5,6 @@ data class TrackUIDetails(
     val trackName: String?,
     val artistName: String?,
     val albumCoverUrl: String?,
-    val durationMs: Long?
+    val durationMs: Long?,
+    val playCount: Int = 0
 )

@@ -23,6 +23,7 @@ import com.truerandom.repository.LikedSongsApiRepository
 import com.truerandom.repository.LikedSongsDBRepository
 import com.truerandom.repository.SecurePreferencesRepository
 import com.truerandom.service.TrackService
+import com.truerandom.util.EventsUtil
 import com.truerandom.util.LogUtil
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
@@ -238,6 +239,9 @@ class MainViewModel @Inject constructor(
      **/
     // Connect appRemote - this must be done before auth
     fun attemptAppRemoteConnect(context: Context) {
+        LogUtil.d(TAG, "attemptAppRemoteConnect")
+        isLoading = true
+
         // Use showAuthView(true) to implicitly re-authorize the user without a full login screen
         val connectionParams = ConnectionParams.Builder(CLIENT_ID)
             .setRedirectUri(REDIRECT_URI)
@@ -247,8 +251,14 @@ class MainViewModel @Inject constructor(
         // Connect
         SpotifyAppRemote.connect(context, connectionParams, object : Connector.ConnectionListener {
             override fun onConnected(spotifyAppRemote: SpotifyAppRemote) {
+                LogUtil.d(TAG, "attemptAppRemoteConnect: SpotifyAppRemote onConnected")
+                isLoading = false
+
                 // Set instance to sticky service
                 TrackService.mSpotifyAppRemote = spotifyAppRemote
+
+                // Register system media callback
+                EventsUtil.sendRegisterMediaCallbackEvent(true)
 
                 // TODO: JAY_LOG - remove if unused
 //                subscribeToPlayerState()
@@ -257,6 +267,9 @@ class MainViewModel @Inject constructor(
             }
 
             override fun onFailure(throwable: Throwable) {
+                LogUtil.d(TAG, "attemptAppRemoteConnect: SpotifyAppRemote onFailure: ${throwable.message}")
+                isLoading = false
+
                 toastMsg = "Spotify Remote Failed: ${throwable.message}"
             }
         })

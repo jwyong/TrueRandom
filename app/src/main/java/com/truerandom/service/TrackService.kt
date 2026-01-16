@@ -4,11 +4,13 @@ import android.app.Service
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.os.IBinder
 import android.provider.Settings
+import android.util.Log
 import com.spotify.android.appremote.api.SpotifyAppRemote
 import com.truerandom.R
 import com.truerandom.repository.LikedSongsDBRepository
@@ -26,6 +28,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -50,22 +53,45 @@ class TrackService : Service() {
         override fun onPlaybackStateChanged(state: PlaybackState?) {
             state ?: return
 
+            // Get the URI from the controller's current metadata
+            val currentMetadata = spotifyController?.metadata
+            val trackUri = currentMetadata?.getString(MediaMetadata.METADATA_KEY_MEDIA_ID)
+
+            // Ignore this callback if trackUri is different
+            if (trackUri?.isNotBlank() == true && currentTrackUri?.isNotBlank() == true) {
+                if (trackUri != currentTrackUri) {
+                    LogUtil.d(TAG, "callback trackUri = $trackUri, currentTrackUri = $currentTrackUri, ignoring...")
+                    return
+                }
+            }
+
             val isPaused = state.state == PlaybackState.STATE_PAUSED
             val playbackPosition = state.position
 
             if (isPaused) {
+                Log.d(
+                    TAG,
+                    "TrackService, onPlaybackStateChanged: $currentTrackLabel isPaused = $isPaused, playbackPosition = $playbackPosition"
+                )
+
                 // Position == 0, this track is done - play next random track
                 if (playbackPosition == 0L) {
                     if (hasDetectedTrackEnd) return
 
-                    LogUtil.d(TAG, "TrackService: onPlaybackStateChanged - $currentTrackLabel is ending. Trigger next track logic.")
+                    LogUtil.d(
+                        TAG,
+                        "TrackService: onPlaybackStateChanged - $currentTrackLabel is ending. Trigger next track logic."
+                    )
 
                     hasDetectedTrackEnd = true
 
                     playRandomLeastCountTrack(true)
 
                 } else {
-                    LogUtil.d(TAG, "TrackService: onPlaybackStateChanged - $currentTrackLabel paused.")
+                    LogUtil.d(
+                        TAG,
+                        "TrackService: onPlaybackStateChanged - $currentTrackLabel paused."
+                    )
 
                     // Position NOT 0 - just update UI to PAUSED
                     isPlaying = false
@@ -79,16 +105,14 @@ class TrackService : Service() {
 
     // 2. Function to find and bind to Spotify
     private fun connectToSpotifyController() {
+        LogUtil.d(TAG, "TrackService: connectToSpotifyController")
+
         if (!isNotificationServiceEnabled()) {
+            LogUtil.d(TAG, "Notification service not enabled - launching settings screen...")
+
             val intent = Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(intent)
-        }
-
-        if (!isNotificationServiceEnabled()) {
-            LogUtil.d(TAG, "Cannot bind to Spotify: Notification Access not granted.")
-            // Optionally: Trigger the settings Intent here (see step 3)
-            return
         }
 
         try {
@@ -100,12 +124,37 @@ class TrackService : Service() {
             val spotify = sessions.find { it.packageName == "com.spotify.music" }
 
             if (spotify != null) {
+                // If we already have a controller, unregister from it first
+                spotifyController?.unregisterCallback(mediaCallback)
+
+                // Assign new controller
                 spotifyController = spotify
+
+                // Ensure no duplicate registrations even on the NEW controller
+                spotifyController?.unregisterCallback(mediaCallback)
                 spotifyController?.registerCallback(mediaCallback)
+
                 LogUtil.d(TAG, "Successfully bound to Spotify System Events")
+            } else {
+                LogUtil.d(TAG, "spotify session is NULL")
             }
+
         } catch (e: SecurityException) {
             LogUtil.d(TAG, "SecurityException: Still missing permission! ${e.message}")
+        }
+    }
+
+    private fun cleanupMediaController() {
+        try {
+            spotifyController?.let { controller ->
+                LogUtil.d(TAG, "Unregistering mediaCallback and clearing controller...")
+                controller.unregisterCallback(mediaCallback)
+            }
+        } catch (e: Exception) {
+            LogUtil.d(TAG, "Error during media controller cleanup: ${e.message}")
+        } finally {
+            // Always null out the reference to avoid memory leaks
+            spotifyController = null
         }
     }
 
@@ -122,13 +171,12 @@ class TrackService : Service() {
         collectPlayPauseBtnEvent()
         collectPrevNextBtnEvent()
         collectCurrentTrackEndedEvent()
+        collectRegisterMediaCallbackEvent()
 
         collectNotificationUiFlowEvent()
 
         // Show foreground notification
         NotificationUtil.createNotificationChannel(this)
-
-        connectToSpotifyController()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -226,6 +274,24 @@ class TrackService : Service() {
         }
     }
 
+    // System media callback register / destroy
+    private fun collectRegisterMediaCallbackEvent() {
+        collectScope.launch {
+            EventsUtil.registerMediaCallbackEventFlow.flow.collect { isStart ->
+                LogUtil.d(TAG, "TrackService, registerMediaCallbackEventFlow: isStart = $isStart")
+
+                // Media callback registration must be done on main thread
+                withContext(Dispatchers.Main) {
+                    if (isStart) {
+                        connectToSpotifyController()
+                    } else {
+                        cleanupMediaController()
+                    }
+                }
+            }
+        }
+    }
+
     // Notification UI - just create a new notification and set to foreground again
     private fun collectNotificationUiFlowEvent() {
         collectScope.launch {
@@ -296,17 +362,14 @@ class TrackService : Service() {
         mSpotifyAppRemote?.playerApi
             ?.play(currentTrackUri)
             ?.setResultCallback {
-                // SUCCESS: The command was successfully sent to the Spotify client,
-                // and the client has acknowledged it and started playback.
-                LogUtil.d(TAG, "TrackService, playCurrentTrackUri: Successfully started playing URI: $currentTrackUri")
-
-                // Reset trackEnd detected boolean
+                // Playback started successfully - set trackEnd detected boolean
                 hasDetectedTrackEnd = false
 
                 // Update UI (title and artist)
                 defaultScope.launch {
                     currentTrackUri?.let { trackUri ->
-                        val trackUIDetail = likedSongsDBRepository.getTrackDetailsByTrackUri(trackUri)
+                        val trackUIDetail =
+                            likedSongsDBRepository.getTrackDetailsByTrackUri(trackUri)
                         val trackName = if (trackUIDetail?.trackName?.isNotBlank() == true) {
                             trackUIDetail.trackName
                         } else {
@@ -318,7 +381,13 @@ class TrackService : Service() {
                             getString(R.string.unknown)
                         }
 
-                        currentTrackLabel = "$trackName - $trackArtists"
+                        val currentTrackPlayCount = trackUIDetail?.playCount?: 0
+                        currentTrackLabel = "[$currentTrackPlayCount] $trackName - $trackArtists"
+
+                        LogUtil.d(
+                            TAG,
+                            "TrackService: Successfully started playing ${currentTrackLabel}, URI: $currentTrackUri"
+                        )
                     }
                 }
             }?.setErrorCallback { throwable ->
