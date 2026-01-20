@@ -1,9 +1,21 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 // Apply plugins
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.hilt)
     kotlin("kapt")
+    kotlin("plugin.serialization")
+}
+android.buildFeatures.buildConfig = true
+
+// 1. Load the properties file
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localProperties.load(FileInputStream(localPropertiesFile))
 }
 
 android {
@@ -15,12 +27,33 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = 4
-        versionName = "1.2.0"
+        versionName = "1.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         manifestPlaceholders["redirectSchemeName"] = "truerandom" // The scheme
         manifestPlaceholders["redirectHostName"] = "callback"          // The host
+
+        buildConfigField(
+            "String",
+            "SPOTIFY_CLIENT_ID",
+            "\"${localProperties.getProperty("SPOTIFY_CLIENT_ID")}\""
+        )
+        buildConfigField(
+            "String",
+            "SPOTIFY_SECRET",
+            "\"${localProperties.getProperty("SPOTIFY_CLIENT_SECRET")}\""
+        )
+        buildConfigField(
+            "String",
+            "SUPABASE_API_KEY",
+            "\"${localProperties.getProperty("SUPABASE_API_KEY")}\""
+        )
+        buildConfigField(
+            "String",
+            "SUPABASE_PROJECT_URL",
+            "\"${localProperties.getProperty("SUPABASE_PROJECT_URL")}\""
+        )
     }
 
     buildTypes {
@@ -82,6 +115,13 @@ dependencies {
 
     implementation("androidx.media:media:1.7.0")
     implementation("com.github.bumptech.glide:glide:4.16.0")
+
+    // supabase
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2")
+    implementation("io.github.jan-tennert.supabase:postgrest-kt:3.0.1")
+    implementation("io.github.jan-tennert.supabase:auth-kt:3.0.1")
+    implementation("io.ktor:ktor-client-android:3.0.1")
+    implementation("io.ktor:ktor-serialization-kotlinx-json:3.0.1")
 }
 
 kapt {

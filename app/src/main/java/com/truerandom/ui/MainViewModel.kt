@@ -17,11 +17,15 @@ import com.spotify.android.appremote.api.SpotifyAppRemote
 import com.spotify.sdk.android.auth.AuthorizationClient
 import com.spotify.sdk.android.auth.AuthorizationRequest
 import com.spotify.sdk.android.auth.AuthorizationResponse
+import com.truerandom.BuildConfig
 import com.truerandom.db.entity.LikedTrackEntity
+import com.truerandom.db.entity.PlayCountEntity
 import com.truerandom.model.LikedTrackWithCount
 import com.truerandom.repository.LikedSongsApiRepository
 import com.truerandom.repository.LikedSongsDBRepository
+import com.truerandom.repository.PlayCountDbRepository
 import com.truerandom.repository.SecurePreferencesRepository
+import com.truerandom.repository.SupabaseRepository
 import com.truerandom.service.TrackService
 import com.truerandom.util.EventsUtil
 import com.truerandom.util.LogUtil
@@ -33,7 +37,7 @@ import javax.inject.Inject
 const val AUTH_REQUEST_CODE = 394056
 
 // Auth params
-private const val CLIENT_ID = "e61d6a48cd14457c97e43850f03eb35c"
+private const val CLIENT_ID = BuildConfig.SPOTIFY_CLIENT_ID
 private const val REDIRECT_URI = "truerandom://auth"
 
 @HiltViewModel
@@ -41,7 +45,9 @@ class MainViewModel @Inject constructor(
     private val gson: Gson,
     private val preferencesRepository: SecurePreferencesRepository,
     private val likedSongsDBRepository: LikedSongsDBRepository,
-    private val likedSongsApiRepository: LikedSongsApiRepository
+    private val likedSongsApiRepository: LikedSongsApiRepository,
+    private val playCountDbRepository: PlayCountDbRepository,
+    private val supabaseRepository: SupabaseRepository
 ) : ViewModel() {
     private val authScopes = arrayOf(
         "user-read-email",
@@ -77,6 +83,42 @@ class MainViewModel @Inject constructor(
             likedSongsDBRepository.getPagedLikedTracksWithCount()
         }
     ).flow.cachedIn(viewModelScope)
+
+    /**
+     * Supabase related
+     **/
+    // Start checking and syncing data from supabase (play_count table)
+    fun startCheckSupabaseFlow() {
+        // Sync from cloud first (upsert to local), then sync to cloud (upsert to cloud)
+        viewModelScope.launch {
+            syncPlayCountsFromCloud()
+            syncPlayCountsToCloud()
+        }
+    }
+
+    private suspend fun syncPlayCountsFromCloud() {
+        // Get full list of play counts from supabase
+        val playCountEntities = supabaseRepository.getAllPlayCounts()
+        println("Play counts from Supabase: ${playCountEntities.size}")
+
+        // Upsert to local db
+        if (playCountEntities.isNotEmpty()) {
+            val upserted = playCountDbRepository.upsertPlayCounts(playCountEntities)
+            println("Upserted supabase play counts to local db: ${upserted.size}")
+        }
+    }
+
+    private suspend fun syncPlayCountsToCloud(): List<PlayCountEntity> {
+        // Upsert whole local db to supabase for syncing
+        val allPlayCounts = playCountDbRepository.getAllPlayCounts()
+        val upsertSupabaseResult = supabaseRepository.upsertPlayCounts(allPlayCounts)
+        println("upsertSupabaseResult = $upsertSupabaseResult")
+
+        isLoading = false
+        toastMsg = "Synced play count"
+
+        return allPlayCounts
+    }
 
     /**
      * Auth related
@@ -232,6 +274,20 @@ class MainViewModel @Inject constructor(
         }
 
         isLoading = false
+
+        // Get list of trackUris from LikedTracks and compare in playCount table
+        val likedTrackUris = likedSongsDBRepository.getAllTrackUris()
+        val unlikedTrackUris = playCountDbRepository.getOrphanedPlayCountUris(likedTrackUris)
+        println("Unliked trackUris: ${unlikedTrackUris.size}")
+
+        val deletedPlayCount = playCountDbRepository.deletePlayCountsNotInList(likedTrackUris)
+
+        println("Deleted $deletedPlayCount playCount rows from local playCount table.")
+
+        // Then sync local db to cloud + cleanup old items on cloud
+        supabaseRepository.deletePlayCountsFromCloud(unlikedTrackUris)
+
+        println("Deleted ${unlikedTrackUris.size} playCount rows from cloud playCount table.")
     }
 
     /**

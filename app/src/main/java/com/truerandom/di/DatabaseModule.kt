@@ -2,6 +2,7 @@ package com.truerandom.di
 
 import android.content.Context
 import androidx.room.Room
+import com.truerandom.dao.PlayCountDao
 import com.truerandom.dao.TrackDao
 import com.truerandom.db.AppDatabase
 import dagger.Module
@@ -40,5 +41,9 @@ object DatabaseModule {
     @Provides
     fun provideTrackDao(database: AppDatabase): TrackDao {
         return database.trackDao()
+    }
+    @Provides
+    fun providePlayCountDao(database: AppDatabase): PlayCountDao {
+        return database.playCountDao()
     }
 }

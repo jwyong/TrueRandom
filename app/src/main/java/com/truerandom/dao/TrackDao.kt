@@ -17,6 +17,10 @@ import com.truerandom.model.TrackUIDetails
  */
 @Dao
 interface TrackDao {
+    // Get list of trackUris only
+    @Query("SELECT trackUri FROM liked_tracks")
+    suspend fun getAllTrackUris(): List<String>
+
     // Get tracks count
     @Query("SELECT COUNT(trackUri) FROM liked_tracks")
     suspend fun getTrackCount(): Int
@@ -38,6 +42,9 @@ interface TrackDao {
     @Query("UPDATE play_count SET playCount = playCount + 1 WHERE trackUri = :trackUri")
     suspend fun incrementExistingCount(trackUri: String): Int
 
+    @Query("SELECT * FROM play_count WHERE trackUri = :trackUri")
+    suspend fun getPlayCountByUri(trackUri: String): PlayCountEntity?
+
     /**
      * Increments the playCount of a specific track identified by its URI. Adds a new row with count 1
      * if the trackUri doesn't exist yet.
@@ -46,18 +53,17 @@ interface TrackDao {
      * @return The number of rows updated (should be 1 if successful).
      */
     @Transaction
-    suspend fun incrementPlayCount(trackUri: String): Boolean {
+    suspend fun incrementPlayCount(trackUri: String): PlayCountEntity? {
         // Try to update existing row first
         val rowsUpdated = incrementExistingCount(trackUri)
 
         // If no rows updated, attempt to insert new row with count == 1
-        return if (rowsUpdated == 0) {
+        if (rowsUpdated == 0) {
             // Count is incremented if inserted rowId is NON-zero
             insertNewTrack(PlayCountEntity(trackUri, 1)) != 0L
-        } else {
-            // Always true since updated row is NON-zero
-            true
         }
+
+        return getPlayCountByUri(trackUri)
     }
 
     /**
@@ -120,7 +126,7 @@ interface TrackDao {
             COALESCE(pc.playCount, 0) AS playCount
         FROM liked_tracks lt
         LEFT JOIN play_count pc ON lt.trackUri = pc.trackUri
-        ORDER BY pc.playCount ASC, lt.trackName ASC
+        ORDER BY pc.playCount DESC, lt.trackName ASC
     """
     )
     fun getPagedLikedTracksWithCount(): PagingSource<Int, LikedTrackWithCount>

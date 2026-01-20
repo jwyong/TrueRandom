@@ -18,6 +18,8 @@ import javax.inject.Singleton
 class LikedSongsDBRepository @Inject constructor(
     private val trackDao: TrackDao
 ) {
+    suspend fun getAllTrackUris() = trackDao.getAllTrackUris()
+
     // Check if already synced liked songs
     suspend fun isLikedSongsSynced(): Boolean {
         return withContext(Dispatchers.IO) {
@@ -48,11 +50,9 @@ class LikedSongsDBRepository @Inject constructor(
      *
      * @param trackUri The unique Spotify URI of the track that was just played.
      */
-    suspend fun incrementTrackPlayCount(trackUri: String): Boolean {
-        return withContext(Dispatchers.IO) {
-            // The DAO executes the UPDATE query to increment the count
-            trackDao.incrementPlayCount(trackUri)
-        }
+    suspend fun incrementTrackPlayCount(trackUri: String) = withContext(Dispatchers.IO) {
+        // The DAO executes the UPDATE query to increment the count
+        trackDao.incrementPlayCount(trackUri)
     }
 
     /**

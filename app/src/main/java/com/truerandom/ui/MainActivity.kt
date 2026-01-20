@@ -46,6 +46,7 @@ class MainActivity : AppCompatActivity(), StandardPermissionsUtil.StandardPermis
         StandardPermissionsUtil.requestStandardPermissions(this)
 
         // Start check auth + appRemote
+        viewModel.startCheckSupabaseFlow()
         viewModel.checkAndFetchLikedTracks(this)
         viewModel.attemptAppRemoteConnect(this)
     }

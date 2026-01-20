@@ -15,6 +15,7 @@ import com.spotify.android.appremote.api.SpotifyAppRemote
 import com.truerandom.R
 import com.truerandom.repository.LikedSongsDBRepository
 import com.truerandom.repository.SecurePreferencesRepository
+import com.truerandom.repository.SupabaseRepository
 import com.truerandom.ui.TAG
 import com.truerandom.util.EventsUtil
 import com.truerandom.util.LogUtil
@@ -35,6 +36,9 @@ import javax.inject.Inject
 class TrackService : Service() {
     @Inject
     lateinit var likedSongsDBRepository: LikedSongsDBRepository
+
+    @Inject
+    lateinit var supabaseRepository: SupabaseRepository
 
     // Dedicated scope for collecting event flows
     private val collectScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -329,11 +333,17 @@ class TrackService : Service() {
 
                 // Increment current track's playCount if needed (for normal playback finished)
                 if (shouldIncrementPlayCount) {
-                    val isIncremented = likedSongsDBRepository.incrementTrackPlayCount(currentUri)
+                    val incrementedPlayCount = likedSongsDBRepository.incrementTrackPlayCount(currentUri)
                     LogUtil.d(
                         TAG,
-                        "TrackService, playRandomLeastCountTrack: isIncremented = $isIncremented"
+                        "TrackService, playRandomLeastCountTrack: incrementedPlayCount = $incrementedPlayCount"
                     )
+
+                    // Sync the incremented playCount to cloud
+                    if (incrementedPlayCount != null) {
+                        supabaseRepository.upsertPlayCount(incrementedPlayCount)
+                        LogUtil.d(TAG,"Synced incremented playCount to cloud")
+                    }
                 }
 
                 // Set current track to previous track

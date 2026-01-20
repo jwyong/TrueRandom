@@ -4,6 +4,7 @@ import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.truerandom.dao.PlayCountDao
 import com.truerandom.dao.TrackDao
 import com.truerandom.db.entity.LikedTrackEntity
 import com.truerandom.db.entity.PlayCountEntity
@@ -24,6 +25,7 @@ abstract class AppDatabase : RoomDatabase() {
     
     // Abstract function to expose the DAO
     abstract fun trackDao(): TrackDao
+    abstract fun playCountDao(): PlayCountDao
 
     companion object {
         const val DATABASE_NAME = "spotify_randomizer_db"
