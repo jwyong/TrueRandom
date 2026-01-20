@@ -7,5 +7,6 @@ data class LikedTrackWithCount(
     val albumCoverUrl: String?,
     val isLocal: Boolean?,
     val addedAt: String?,
+    val durationMs: Long?,
     val playCount: Int // From the play_count table
 )

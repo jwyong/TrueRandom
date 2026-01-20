@@ -17,11 +17,15 @@ import com.spotify.android.appremote.api.SpotifyAppRemote
 import com.spotify.sdk.android.auth.AuthorizationClient
 import com.spotify.sdk.android.auth.AuthorizationRequest
 import com.spotify.sdk.android.auth.AuthorizationResponse
+import com.truerandom.BuildConfig
 import com.truerandom.db.entity.LikedTrackEntity
+import com.truerandom.db.entity.PlayCountEntity
 import com.truerandom.model.LikedTrackWithCount
 import com.truerandom.repository.LikedSongsApiRepository
 import com.truerandom.repository.LikedSongsDBRepository
+import com.truerandom.repository.PlayCountDbRepository
 import com.truerandom.repository.SecurePreferencesRepository
+import com.truerandom.repository.SupabaseRepository
 import com.truerandom.service.TrackService
 import com.truerandom.util.EventsUtil
 import com.truerandom.util.LogUtil
@@ -33,7 +37,7 @@ import javax.inject.Inject
 const val AUTH_REQUEST_CODE = 394056
 
 // Auth params
-private const val CLIENT_ID = "e61d6a48cd14457c97e43850f03eb35c"
+private const val CLIENT_ID = BuildConfig.SPOTIFY_CLIENT_ID
 private const val REDIRECT_URI = "truerandom://auth"
 
 @HiltViewModel
@@ -41,7 +45,9 @@ class MainViewModel @Inject constructor(
     private val gson: Gson,
     private val preferencesRepository: SecurePreferencesRepository,
     private val likedSongsDBRepository: LikedSongsDBRepository,
-    private val likedSongsApiRepository: LikedSongsApiRepository
+    private val likedSongsApiRepository: LikedSongsApiRepository,
+    private val playCountDbRepository: PlayCountDbRepository,
+    private val supabaseRepository: SupabaseRepository
 ) : ViewModel() {
     private val authScopes = arrayOf(
         "user-read-email",
@@ -74,11 +80,45 @@ class MainViewModel @Inject constructor(
             prefetchDistance = 20      // Loads next page when 20 items from bottom
         ),
         pagingSourceFactory = {
-            val it = likedSongsDBRepository.getPagedLikedTracks()
-            LogUtil.d(TAG, "MainViewModel, it = $it: ")
-            it
+            likedSongsDBRepository.getPagedLikedTracksWithCount()
         }
     ).flow.cachedIn(viewModelScope)
+
+    /**
+     * Supabase related
+     **/
+    // Start checking and syncing data from supabase (play_count table)
+    fun startCheckSupabaseFlow() {
+        // Sync from cloud first (upsert to local), then sync to cloud (upsert to cloud)
+        viewModelScope.launch {
+            syncPlayCountsFromCloud()
+            syncPlayCountsToCloud()
+        }
+    }
+
+    private suspend fun syncPlayCountsFromCloud() {
+        // Get full list of play counts from supabase
+        val playCountEntities = supabaseRepository.getAllPlayCounts()
+        println("Play counts from Supabase: ${playCountEntities.size}")
+
+        // Upsert to local db
+        if (playCountEntities.isNotEmpty()) {
+            val upserted = playCountDbRepository.upsertPlayCounts(playCountEntities)
+            println("Upserted supabase play counts to local db: ${upserted.size}")
+        }
+    }
+
+    private suspend fun syncPlayCountsToCloud(): List<PlayCountEntity> {
+        // Upsert whole local db to supabase for syncing
+        val allPlayCounts = playCountDbRepository.getAllPlayCounts()
+        val upsertSupabaseResult = supabaseRepository.upsertPlayCounts(allPlayCounts)
+        println("upsertSupabaseResult = $upsertSupabaseResult")
+
+        isLoading = false
+        toastMsg = "Synced play count"
+
+        return allPlayCounts
+    }
 
     /**
      * Auth related
@@ -130,8 +170,6 @@ class MainViewModel @Inject constructor(
 
     // After user auth (activity result)
     fun onAuthActivityResult(response: AuthorizationResponse) {
-        LogUtil.d(TAG, "Authorization Response Parsed. Type: ${response.type.name}")
-
         when (response.type) {
             AuthorizationResponse.Type.TOKEN -> {
                 accessToken = response.accessToken
@@ -217,7 +255,8 @@ class MainViewModel @Inject constructor(
                             addedAt = item.addedAt,
 
                             // Use first url in album images list as cover
-                            albumCoverUrl = track.album?.images?.firstOrNull()?.url
+                            albumCoverUrl = track.album?.images?.firstOrNull()?.url,
+                            durationMs = track.durationMs
                         )
                     }
                 }
@@ -232,12 +271,23 @@ class MainViewModel @Inject constructor(
 
             // Update url for next paged request
             url = response.next
-            Log.d(TAG, "MainViewModel, url updated to $url")
         }
 
-        Log.d(TAG, "MainViewModel, done fetching liked songs")
-
         isLoading = false
+
+        // Get list of trackUris from LikedTracks and compare in playCount table
+        val likedTrackUris = likedSongsDBRepository.getAllTrackUris()
+        val unlikedTrackUris = playCountDbRepository.getOrphanedPlayCountUris(likedTrackUris)
+        println("Unliked trackUris: ${unlikedTrackUris.size}")
+
+        val deletedPlayCount = playCountDbRepository.deletePlayCountsNotInList(likedTrackUris)
+
+        println("Deleted $deletedPlayCount playCount rows from local playCount table.")
+
+        // Then sync local db to cloud + cleanup old items on cloud
+        supabaseRepository.deletePlayCountsFromCloud(unlikedTrackUris)
+
+        println("Deleted ${unlikedTrackUris.size} playCount rows from cloud playCount table.")
     }
 
     /**
@@ -245,7 +295,8 @@ class MainViewModel @Inject constructor(
      **/
     // Connect appRemote - this must be done before auth
     fun attemptAppRemoteConnect(context: Context) {
-        LogUtil.d(TAG, "MainActivityViewModel, attemptAppRemoteConnect:")
+        LogUtil.d(TAG, "attemptAppRemoteConnect")
+        isLoading = true
 
         // Use showAuthView(true) to implicitly re-authorize the user without a full login screen
         val connectionParams = ConnectionParams.Builder(CLIENT_ID)
@@ -256,24 +307,31 @@ class MainViewModel @Inject constructor(
         // Connect
         SpotifyAppRemote.connect(context, connectionParams, object : Connector.ConnectionListener {
             override fun onConnected(spotifyAppRemote: SpotifyAppRemote) {
-                LogUtil.d(TAG, "MainViewModel, attemptAppRemoteConnect onConnected: ")
+                LogUtil.d(TAG, "attemptAppRemoteConnect: SpotifyAppRemote onConnected")
+                isLoading = false
 
                 // Set instance to sticky service
                 TrackService.mSpotifyAppRemote = spotifyAppRemote
 
-                subscribeToPlayerState()
+                // Register system media callback
+                EventsUtil.sendRegisterMediaCallbackEvent(true)
+
+                // TODO: JAY_LOG - remove if unused
+//                subscribeToPlayerState()
 
                 toastMsg = "Spotify Remote Connected!"
             }
 
             override fun onFailure(throwable: Throwable) {
-                Log.e(TAG, "SpotifyAppRemote connection failed: ${throwable.message}", throwable)
+                LogUtil.d(TAG, "attemptAppRemoteConnect: SpotifyAppRemote onFailure: ${throwable.message}")
+                isLoading = false
 
                 toastMsg = "Spotify Remote Failed: ${throwable.message}"
             }
         })
     }
 
+    // TODO: JAY_LOG - remove if unused
     // Subscribe to player state to detect end and play next random track
     private fun subscribeToPlayerState() {
         TrackService.mSpotifyAppRemote?.playerApi
@@ -281,10 +339,17 @@ class MainViewModel @Inject constructor(
             ?.setEventCallback { playerState ->
                 val track = playerState.track
                 if (track != null) {
+                    // Only care for the current trackId
+                    if (playerState.track.uri != TrackService.currentTrackUri) {
+                        LogUtil.d(TAG, "MainVM playerState trackUri different: playerUri = ${playerState.track.uri}, " +
+                                "currentUri = ${TrackService.currentTrackUri} - do nothing...")
+                        return@setEventCallback
+                    }
+
                     // Log and update your UI/Service state with the new track and position
                     LogUtil.d(
                         TAG,
-                        "Player State: Track ID: ${track.uri} - isPaused: ${playerState.isPaused}, " +
+                        "MainVM playerState: trackUri = ${track.uri}, isPaused = ${playerState.isPaused}, " +
                                 "position = ${playerState.playbackPosition}"
                     )
 
@@ -298,7 +363,7 @@ class MainViewModel @Inject constructor(
                             LogUtil.d(TAG, "Track ${track.name} is ending. Trigger next track logic.")
                             TrackService.hasDetectedTrackEnd = true
 
-                            EventsUtil.sendTrackPlaybackEndEvent()
+//                            EventsUtil.sendTrackPlaybackEndEvent()
                         } else {
                             // Position NOT 0 - just update UI to PAUSED
                             TrackService.isPlaying = false

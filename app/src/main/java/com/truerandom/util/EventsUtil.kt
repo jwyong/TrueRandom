@@ -23,4 +23,10 @@ object EventsUtil {
     fun sendTrackPlaybackEndEvent() {
         trackPlaybackEndEventFlow.tryEmit(Unit)
     }
+
+    // Register the system media callback
+    val registerMediaCallbackEventFlow = BroadcastFlow<Boolean>()
+    fun sendRegisterMediaCallbackEvent(isStart: Boolean) {
+        registerMediaCallbackEventFlow.tryEmit(isStart)
+    }
 }

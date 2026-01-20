@@ -21,8 +21,11 @@ data class LikedTrackEntity(
     // Track information for display
     val trackName: String?,
     val artistName: String?,
-    val albumCoverUrl: String? = null, // TODO: JAY_LOG - empty for now
+    val albumCoverUrl: String? = null,
     
     // Metadata for ordering/display
     val addedAt: String?, // ISO 8601 timestamp from Spotify
+
+    // For playback end detection
+    val durationMs: Long?,
 )

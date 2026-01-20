@@ -4,6 +4,7 @@ import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.truerandom.dao.PlayCountDao
 import com.truerandom.dao.TrackDao
 import com.truerandom.db.entity.LikedTrackEntity
 import com.truerandom.db.entity.PlayCountEntity
@@ -17,13 +18,14 @@ import com.truerandom.db.entity.PlayCountEntity
  */
 @Database(
     entities = [LikedTrackEntity::class, PlayCountEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     
     // Abstract function to expose the DAO
     abstract fun trackDao(): TrackDao
+    abstract fun playCountDao(): PlayCountDao
 
     companion object {
         const val DATABASE_NAME = "spotify_randomizer_db"
@@ -69,6 +71,15 @@ abstract class AppDatabase : RoomDatabase() {
                 // 5. Delete the old table and rename the new one
                 db.execSQL("DROP TABLE liked_tracks")
                 db.execSQL("ALTER TABLE liked_tracks_new RENAME TO liked_tracks")
+            }
+        }
+
+        // v2 to v3: add "durationMs" Long column for playback end detection fallback
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE liked_tracks ADD COLUMN durationMs INTEGER"
+                )
             }
         }
     }

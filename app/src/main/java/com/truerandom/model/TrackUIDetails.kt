@@ -4,5 +4,7 @@ data class TrackUIDetails(
     // Note: These field names MUST match the names used in your SELECT statement (and entity fields)
     val trackName: String?,
     val artistName: String?,
-    val albumCoverUrl: String?
+    val albumCoverUrl: String?,
+    val durationMs: Long?,
+    val playCount: Int = 0
 )

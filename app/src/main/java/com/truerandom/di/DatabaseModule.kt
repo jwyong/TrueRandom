@@ -2,6 +2,7 @@ package com.truerandom.di
 
 import android.content.Context
 import androidx.room.Room
+import com.truerandom.dao.PlayCountDao
 import com.truerandom.dao.TrackDao
 import com.truerandom.db.AppDatabase
 import dagger.Module
@@ -30,7 +31,7 @@ object DatabaseModule {
             AppDatabase::class.java,
             AppDatabase.DATABASE_NAME
         )
-            .addMigrations(AppDatabase.MIGRATION_1_2) // Add this line
+            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3)
             .build()
     }
 
@@ -40,5 +41,9 @@ object DatabaseModule {
     @Provides
     fun provideTrackDao(database: AppDatabase): TrackDao {
         return database.trackDao()
+    }
+    @Provides
+    fun providePlayCountDao(database: AppDatabase): PlayCountDao {
+        return database.playCountDao()
     }
 }
