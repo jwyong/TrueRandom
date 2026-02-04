@@ -126,7 +126,7 @@ interface TrackDao {
             COALESCE(pc.playCount, 0) AS playCount
         FROM liked_tracks lt
         LEFT JOIN play_count pc ON lt.trackUri = pc.trackUri
-        ORDER BY pc.playCount DESC, lt.trackName ASC
+        ORDER BY pc.playCount ASC, lt.trackName ASC
     """
     )
     fun getPagedLikedTracksWithCount(): PagingSource<Int, LikedTrackWithCount>

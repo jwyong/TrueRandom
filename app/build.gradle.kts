@@ -26,23 +26,18 @@ android {
         applicationId = "com.truerandom"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "1.3.0"
+        versionCode = 5
+        versionName = "1.3.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        manifestPlaceholders["redirectSchemeName"] = "truerandom" // The scheme
+        manifestPlaceholders["redirectSchemeName"] = "truerandom" // The schemer
         manifestPlaceholders["redirectHostName"] = "callback"          // The host
 
         buildConfigField(
             "String",
             "SPOTIFY_CLIENT_ID",
             "\"${localProperties.getProperty("SPOTIFY_CLIENT_ID")}\""
-        )
-        buildConfigField(
-            "String",
-            "SPOTIFY_SECRET",
-            "\"${localProperties.getProperty("SPOTIFY_CLIENT_SECRET")}\""
         )
         buildConfigField(
             "String",
